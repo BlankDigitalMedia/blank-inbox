@@ -4,16 +4,26 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, renderEmailBody } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 import type { Email } from "@/app/archive/page"
 
 interface ArchiveDetailProps {
   email: Email | null
   onToggleStar: (id: string) => void
   onToggleArchive: (id: string) => void
+  onToggleTrash: (id: string) => void
 }
 
-export function ArchiveDetail({ email, onToggleStar, onToggleArchive }: ArchiveDetailProps) {
+export function ArchiveDetail({ email, onToggleStar, onToggleArchive, onToggleTrash }: ArchiveDetailProps) {
+  const router = useRouter()
+
+  const handleReply = () => {
+    if (email) {
+      router.push(`/compose?reply=${email.id}`)
+    }
+  }
+
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
@@ -33,8 +43,8 @@ export function ArchiveDetail({ email, onToggleStar, onToggleArchive }: ArchiveD
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
             <Archive className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Trash2 className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)}>
+          <Trash2 className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />
@@ -68,15 +78,15 @@ export function ArchiveDetail({ email, onToggleStar, onToggleArchive }: ArchiveD
 
           {/* Email body */}
           <div className="prose prose-sm max-w-none">
-            <p className="text-sm leading-relaxed text-foreground">{email.body}</p>
+            <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2 mt-8">
-            <Button size="sm" className="gap-2">
-              <Reply className="h-4 w-4" />
-              Reply
-            </Button>
+          <Button size="sm" className="gap-2" onClick={handleReply}>
+          <Reply className="h-4 w-4" />
+          Reply
+          </Button>
             <Button variant="outline" size="sm" className="gap-2 bg-transparent">
               <ReplyAll className="h-4 w-4" />
               Reply All

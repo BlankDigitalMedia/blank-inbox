@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArchiveSidebar } from "@/components/archive-sidebar"
+import { MailSidebar } from "@/components/mail-sidebar"
 import { ArchiveList } from "@/components/archive-list"
 import { ArchiveDetail } from "@/components/archive-detail"
 import { Button } from "@/components/ui/button"
@@ -30,12 +30,13 @@ export default function ArchivePage() {
   const emails = useQuery(api.emails.listArchived) as any[] | undefined
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
+  const toggleTrash = useMutation(api.emails.toggleTrash)
   const markRead = useMutation(api.emails.markRead)
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
     await toggleStar({ id: id as any })
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
     }
   }
@@ -43,21 +44,29 @@ export default function ArchivePage() {
   const handleToggleArchive = async (id: string) => {
     await toggleArchive({ id: id as any })
     // Remove from selected email if unarchived (moved back to inbox)
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
+      setSelectedEmail(null)
+    }
+  }
+
+  const handleToggleTrash = async (id: string) => {
+    await toggleTrash({ id: id as any })
+    // Remove from selected email if trashed
+    if (selectedEmail?.id === id) {
       setSelectedEmail(null)
     }
   }
 
   const handleMarkRead = async (id: string) => {
     await markRead({ id: id as any })
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, read: true })
     }
   }
 
   return (
     <SidebarProvider>
-      <ArchiveSidebar />
+      <MailSidebar activeView="archive" />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
@@ -85,10 +94,11 @@ export default function ArchivePage() {
             }}
             onToggleStar={handleToggleStar}
             onToggleArchive={handleToggleArchive}
+            onToggleTrash={handleToggleTrash}
           />
 
           {/* Archived email detail */}
-          <ArchiveDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} />
+          <ArchiveDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} onToggleTrash={handleToggleTrash} />
         </div>
       </SidebarInset>
     </SidebarProvider>

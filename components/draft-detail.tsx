@@ -3,33 +3,32 @@
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
+import { Star, Archive, Trash2, Edit, Send, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import type { Email } from "@/app/starred/page"
+import type { Email } from "@/app/drafts/page"
 
-interface StarredDetailProps {
+interface DraftDetailProps {
   email: Email | null
   onToggleStar: (id: string) => void
   onToggleArchive: (id: string) => void
-  onToggleTrash: (id: string) => void
+  onDeleteDraft: (id: string) => void
 }
 
-export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTrash }: StarredDetailProps) {
+export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraft }: DraftDetailProps) {
   const router = useRouter()
-
-  const handleReply = () => {
-    if (email) {
-      router.push(`/compose?reply=${email.id}`)
-    }
-  }
 
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a starred email to read</p>
+        <p className="text-sm">Select a draft to read</p>
       </div>
     )
+  }
+
+  const handleEditDraft = () => {
+    // Navigate to compose with draft ID as query param
+    router.push(`/compose?draft=${email.id}`)
   }
 
   return (
@@ -43,11 +42,21 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
             <Archive className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)}>
-          <Trash2 className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDeleteDraft(email.id)}>
+            <Trash2 className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleEditDraft}>
+            <Edit className="h-4 w-4" />
+            Edit
+          </Button>
+          <Button size="sm" className="gap-2">
+            <Send className="h-4 w-4" />
+            Send
           </Button>
         </div>
       </div>
@@ -67,7 +76,7 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{email.from}</p>
-                  <p className="text-xs text-muted-foreground">to me</p>
+                  <p className="text-xs text-muted-foreground">Draft</p>
                 </div>
                 <p className="text-xs text-muted-foreground">{email.time}</p>
               </div>
@@ -79,22 +88,6 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
           {/* Email body */}
           <div className="prose prose-sm max-w-none">
             <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 mt-8">
-          <Button size="sm" className="gap-2" onClick={handleReply}>
-          <Reply className="h-4 w-4" />
-          Reply
-          </Button>
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-              <ReplyAll className="h-4 w-4" />
-              Reply All
-            </Button>
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-              <Forward className="h-4 w-4" />
-              Forward
-            </Button>
           </div>
         </div>
       </div>

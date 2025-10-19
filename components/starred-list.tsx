@@ -12,9 +12,10 @@ interface StarredListProps {
   onSelectEmail: (email: Email) => void
   onToggleStar: (id: string) => void
   onToggleArchive: (id: string) => void
+  onToggleTrash: (id: string) => void
 }
 
-export function StarredList({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive }: StarredListProps) {
+export function StarredList({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }: StarredListProps) {
   return (
     <div className="w-full lg:w-96 border-r border-border bg-background flex flex-col">
       {/* Header */}
@@ -24,8 +25,12 @@ export function StarredList({ emails, selectedEmail, onSelectEmail, onToggleStar
           <p className="text-xs text-muted-foreground mt-0.5">{emails.length} starred</p>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Trash2 className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+        if (selectedEmail) {
+            onToggleTrash(selectedEmail.id)
+          }
+        }} disabled={!selectedEmail}>
+          <Trash2 className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />

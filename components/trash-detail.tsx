@@ -6,16 +6,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import type { Email } from "@/app/starred/page"
+import type { Email } from "@/app/trash/page"
 
-interface StarredDetailProps {
+interface TrashDetailProps {
   email: Email | null
   onToggleStar: (id: string) => void
-  onToggleArchive: (id: string) => void
   onToggleTrash: (id: string) => void
 }
 
-export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTrash }: StarredDetailProps) {
+export function TrashDetail({ email, onToggleStar, onToggleTrash }: TrashDetailProps) {
   const router = useRouter()
 
   const handleReply = () => {
@@ -27,7 +26,7 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a starred email to read</p>
+        <p className="text-sm">Select a trashed email to read</p>
       </div>
     )
   }
@@ -40,11 +39,8 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
             <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)} title="Restore from Trash">
             <Archive className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)}>
-          <Trash2 className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />

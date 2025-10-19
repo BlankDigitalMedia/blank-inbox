@@ -6,16 +6,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import type { Email } from "@/app/starred/page"
+import type { Email } from "@/app/sent/page"
 
-interface StarredDetailProps {
+interface SentDetailProps {
   email: Email | null
   onToggleStar: (id: string) => void
   onToggleArchive: (id: string) => void
   onToggleTrash: (id: string) => void
 }
 
-export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTrash }: StarredDetailProps) {
+export function SentDetail({ email, onToggleStar, onToggleArchive, onToggleTrash }: SentDetailProps) {
   const router = useRouter()
 
   const handleReply = () => {
@@ -27,7 +27,7 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a starred email to read</p>
+        <p className="text-sm">Select a sent email to read</p>
       </div>
     )
   }
@@ -58,16 +58,18 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
           {/* Subject */}
           <h1 className="text-2xl font-semibold mb-6 text-balance">{email.subject}</h1>
 
-          {/* Sender info */}
+          {/* Recipient info */}
           <div className="flex items-start gap-4 mb-6">
             <Avatar>
-              <AvatarFallback className="bg-primary text-primary-foreground">{email.from.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {email.to ? email.to.charAt(0).toUpperCase() : "U"}
+              </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">{email.from}</p>
-                  <p className="text-xs text-muted-foreground">to me</p>
+                  <p className="text-sm font-medium">To: {email.to || "Unknown"}</p>
+                  <p className="text-xs text-muted-foreground">from me</p>
                 </div>
                 <p className="text-xs text-muted-foreground">{email.time}</p>
               </div>
@@ -81,17 +83,9 @@ export function StarredDetail({ email, onToggleStar, onToggleArchive, onToggleTr
             <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
           </div>
 
-          {/* Actions */}
+          {/* Actions - For sent emails, maybe show resend or similar */}
           <div className="flex items-center gap-2 mt-8">
-          <Button size="sm" className="gap-2" onClick={handleReply}>
-          <Reply className="h-4 w-4" />
-          Reply
-          </Button>
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-              <ReplyAll className="h-4 w-4" />
-              Reply All
-            </Button>
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+            <Button size="sm" className="gap-2">
               <Forward className="h-4 w-4" />
               Forward
             </Button>

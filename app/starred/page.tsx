@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { StarredSidebar } from "@/components/starred-sidebar"
+import { MailSidebar } from "@/components/mail-sidebar"
 import { StarredList } from "@/components/starred-list"
 import { StarredDetail } from "@/components/starred-detail"
 import { Button } from "@/components/ui/button"
@@ -30,34 +30,43 @@ export default function StarredPage() {
   const emails = useQuery(api.emails.listStarred) as any[] | undefined
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
+  const toggleTrash = useMutation(api.emails.toggleTrash)
   const markRead = useMutation(api.emails.markRead)
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
     await toggleStar({ id: id as any })
     // Remove from selected email if unstarred (no longer in starred view)
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
       setSelectedEmail(null)
     }
   }
 
   const handleToggleArchive = async (id: string) => {
     await toggleArchive({ id: id as any })
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, archived: !(selectedEmail.archived ?? false) })
+    }
+  }
+
+  const handleToggleTrash = async (id: string) => {
+    await toggleTrash({ id: id as any })
+    // Remove from selected email if trashed
+    if (selectedEmail?.id === id) {
+      setSelectedEmail(null)
     }
   }
 
   const handleMarkRead = async (id: string) => {
     await markRead({ id: id as any })
-    if (selectedEmail?._id === id) {
+    if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, read: true })
     }
   }
 
   return (
     <SidebarProvider>
-      <StarredSidebar />
+      <MailSidebar activeView="starred" />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
@@ -85,10 +94,11 @@ export default function StarredPage() {
             }}
             onToggleStar={handleToggleStar}
             onToggleArchive={handleToggleArchive}
+            onToggleTrash={handleToggleTrash}
           />
 
           {/* Starred email detail */}
-          <StarredDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} />
+          <StarredDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} onToggleTrash={handleToggleTrash} />
         </div>
       </SidebarInset>
     </SidebarProvider>

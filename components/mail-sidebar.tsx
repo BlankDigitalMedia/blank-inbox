@@ -19,11 +19,13 @@ import {
 } from "@/components/ui/sidebar"
 import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare } from "lucide-react"
 
-interface StarredSidebarProps {
+interface MailSidebarProps {
+  activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"
+  unreadCount?: number
   onClose?: () => void
 }
 
-export function StarredSidebar({ onClose }: StarredSidebarProps) {
+export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSidebarProps) {
   return (
     <Sidebar variant="inset">
       <SidebarHeader>
@@ -31,9 +33,11 @@ export function StarredSidebar({ onClose }: StarredSidebarProps) {
           <h1 className="text-lg font-semibold">Mail</h1>
           <ThemeToggle />
         </div>
-        <Button className="w-full justify-start gap-2" size="sm">
-          <PenSquare className="h-4 w-4" />
-          Compose
+        <Button asChild className="w-full justify-start gap-2" size="sm">
+          <Link href="/compose">
+            <PenSquare className="h-4 w-4" />
+            Compose
+          </Link>
         </Button>
       </SidebarHeader>
 
@@ -49,15 +53,24 @@ export function StarredSidebar({ onClose }: StarredSidebarProps) {
             <Separator />
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/">
+                {activeView === "inbox" ? (
+                  <SidebarMenuButton>
                     <Inbox className="h-4 w-4" />
                     <span>Inbox</span>
-                  </Link>
-                </SidebarMenuButton>
+                    {unreadCount > 0 && <SidebarMenuBadge>{unreadCount}</SidebarMenuBadge>}
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton asChild>
+                    <Link href="/">
+                      <Inbox className="h-4 w-4" />
+                      <span>Inbox</span>
+                      {unreadCount > 0 && <SidebarMenuBadge>{unreadCount}</SidebarMenuBadge>}
+                    </Link>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive>
+                <SidebarMenuButton asChild isActive={activeView === "starred"}>
                   <Link href="/starred">
                     <Star className="h-4 w-4" />
                     <span>Starred</span>
@@ -65,19 +78,23 @@ export function StarredSidebar({ onClose }: StarredSidebarProps) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <Send className="h-4 w-4" />
-                  <span>Sent</span>
+                <SidebarMenuButton asChild isActive={activeView === "sent"}>
+                  <Link href="/sent">
+                    <Send className="h-4 w-4" />
+                    <span>Sent</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <FileText className="h-4 w-4" />
-                  <span>Drafts</span>
+                <SidebarMenuButton asChild isActive={activeView === "drafts"}>
+                  <Link href="/drafts">
+                    <FileText className="h-4 w-4" />
+                    <span>Drafts</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild isActive={activeView === "archive"}>
                   <Link href="/archive">
                     <Archive className="h-4 w-4" />
                     <span>Archive</span>
@@ -85,9 +102,11 @@ export function StarredSidebar({ onClose }: StarredSidebarProps) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <Trash2 className="h-4 w-4" />
-                  <span>Trash</span>
+                <SidebarMenuButton asChild isActive={activeView === "trash"}>
+                  <Link href="/trash">
+                    <Trash2 className="h-4 w-4" />
+                    <span>Trash</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

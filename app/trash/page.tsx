@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { MailSidebar } from "@/components/mail-sidebar"
-import { InboxList } from "@/components/inbox-list"
-import { InboxDetail } from "@/components/inbox-detail"
+import { TrashList } from "@/components/trash-list"
+import { TrashDetail } from "@/components/trash-detail"
 import { Button } from "@/components/ui/button"
 import {
   SidebarInset,
@@ -21,38 +21,28 @@ export type Email = {
   time: string
   read: boolean
   starred: boolean
+  trashed: boolean
   category: string
   body: string
 }
 
-export function InboxView() {
-  const emails = useQuery(api.emails.list) as any[] | undefined
-  const unreadCount = useQuery(api.emails.unreadCount) as number | undefined
+export default function TrashPage() {
+  const emails = useQuery(api.emails.listTrashed) as any[] | undefined
   const toggleStar = useMutation(api.emails.toggleStar)
-  const toggleArchive = useMutation(api.emails.toggleArchive)
   const toggleTrash = useMutation(api.emails.toggleTrash)
   const markRead = useMutation(api.emails.markRead)
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
-    // optimistic updates can be added later; MVP just mutate
     await toggleStar({ id: id as any })
     if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
     }
   }
 
-  const handleToggleArchive = async (id: string) => {
-    await toggleArchive({ id: id as any })
-    // Remove from selected email if archived
-    if (selectedEmail?.id === id) {
-      setSelectedEmail(null)
-    }
-  }
-
   const handleToggleTrash = async (id: string) => {
     await toggleTrash({ id: id as any })
-    // Remove from selected email if trashed
+    // Remove from selected email if untrashed (moved back)
     if (selectedEmail?.id === id) {
       setSelectedEmail(null)
     }
@@ -67,14 +57,15 @@ export function InboxView() {
 
   return (
     <SidebarProvider>
-      <MailSidebar activeView="inbox" unreadCount={unreadCount} />
+      <MailSidebar activeView="trash" />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
+          <h1 className="text-lg font-semibold">Trash</h1>
         </header>
         <div className="flex flex-1">
-          {/* Email list */}
-          <InboxList
+          {/* Trashed email list */}
+          <TrashList
             emails={(emails ?? []).map((e) => ({
               id: e._id,
               from: e.from,
@@ -83,6 +74,7 @@ export function InboxView() {
               time: new Date(e.receivedAt).toLocaleString(),
               read: e.read,
               starred: e.starred,
+              trashed: e.trashed,
               category: e.category ?? "inbox",
               body: e.body,
             }))}
@@ -92,12 +84,11 @@ export function InboxView() {
               handleMarkRead(email.id)
             }}
             onToggleStar={handleToggleStar}
-            onToggleArchive={handleToggleArchive}
             onToggleTrash={handleToggleTrash}
           />
 
-          {/* Email detail */}
-          <InboxDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} onToggleTrash={handleToggleTrash} />
+          {/* Trashed email detail */}
+          <TrashDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleTrash={handleToggleTrash} />
         </div>
       </SidebarInset>
     </SidebarProvider>
