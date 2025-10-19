@@ -2,8 +2,6 @@
 
 import { useState } from "react"
 import { MailSidebar } from "@/components/mail-sidebar"
-import { InboxList } from "@/components/inbox-list"
-import { InboxDetail } from "@/components/inbox-detail"
 import { Button } from "@/components/ui/button"
 import {
   SidebarInset,
@@ -21,13 +19,31 @@ export type Email = {
   time: string
   read: boolean
   starred: boolean
+  archived?: boolean
+  trashed?: boolean
   category: string
   body: string
 }
 
-export function InboxView() {
-  const emails = useQuery(api.emails.list) as any[] | undefined
-  const unreadCount = useQuery(api.emails.unreadCount) as number | undefined
+interface EmailPageProps {
+  title: string
+  activeView: string
+  query: any // Convex query function
+  ListComponent: React.ComponentType<any>
+  DetailComponent: React.ComponentType<any>
+  shouldRemoveOnToggle?: (action: string, email: Email) => boolean
+}
+
+export function EmailPage({
+  title,
+  activeView,
+  query,
+  ListComponent,
+  DetailComponent,
+  shouldRemoveOnToggle
+}: EmailPageProps) {
+
+  const emails = useQuery(query) as any[] | undefined
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
   const toggleTrash = useMutation(api.emails.toggleTrash)
@@ -35,26 +51,36 @@ export function InboxView() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
-    // optimistic updates can be added later; MVP just mutate
     await toggleStar({ id: id as any })
     if (selectedEmail?.id === id) {
-      setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
+      const shouldRemove = shouldRemoveOnToggle?.("star", selectedEmail)
+      if (shouldRemove) {
+        setSelectedEmail(null)
+      } else {
+        setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
+      }
     }
   }
 
   const handleToggleArchive = async (id: string) => {
     await toggleArchive({ id: id as any })
-    // Remove from selected email if archived
     if (selectedEmail?.id === id) {
-      setSelectedEmail(null)
+      const shouldRemove = shouldRemoveOnToggle?.("archive", selectedEmail)
+      if (shouldRemove) {
+        setSelectedEmail(null)
+      } else {
+        setSelectedEmail({ ...selectedEmail, archived: !(selectedEmail.archived ?? false) })
+      }
     }
   }
 
   const handleToggleTrash = async (id: string) => {
     await toggleTrash({ id: id as any })
-    // Remove from selected email if trashed
     if (selectedEmail?.id === id) {
-      setSelectedEmail(null)
+      const shouldRemove = shouldRemoveOnToggle?.("trash", selectedEmail)
+      if (shouldRemove) {
+        setSelectedEmail(null)
+      }
     }
   }
 
@@ -65,29 +91,33 @@ export function InboxView() {
     }
   }
 
+  const transformedEmails = (emails ?? []).map((e) => ({
+    id: e._id,
+    from: e.from,
+    subject: e.subject,
+    preview: e.preview,
+    time: new Date(e.receivedAt).toLocaleString(),
+    read: e.read,
+    starred: e.starred,
+    archived: e.archived,
+    trashed: e.trashed,
+    category: e.category ?? "inbox",
+    body: e.body,
+  }))
+
   return (
     <SidebarProvider>
-      <MailSidebar activeView="inbox" unreadCount={unreadCount} />
+      <MailSidebar activeView={activeView as "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"} />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
+          <h1 className="text-lg font-semibold">{title}</h1>
         </header>
         <div className="flex flex-1">
-          {/* Email list */}
-          <InboxList
-            emails={(emails ?? []).map((e) => ({
-              id: e._id,
-              from: e.from,
-              subject: e.subject,
-              preview: e.preview,
-              time: new Date(e.receivedAt).toLocaleString(),
-              read: e.read,
-              starred: e.starred,
-              category: e.category ?? "inbox",
-              body: e.body,
-            }))}
+          <ListComponent
+            emails={transformedEmails}
             selectedEmail={selectedEmail}
-            onSelectEmail={(email) => {
+            onSelectEmail={(email: Email) => {
               setSelectedEmail(email)
               handleMarkRead(email.id)
             }}
@@ -96,8 +126,12 @@ export function InboxView() {
             onToggleTrash={handleToggleTrash}
           />
 
-          {/* Email detail */}
-          <InboxDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} onToggleTrash={handleToggleTrash} />
+          <DetailComponent
+            email={selectedEmail}
+            onToggleStar={handleToggleStar}
+            onToggleArchive={handleToggleArchive}
+            onToggleTrash={handleToggleTrash}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>

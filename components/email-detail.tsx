@@ -3,32 +3,58 @@
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Star, Archive, Trash2, Edit, Send, MoreHorizontal } from "lucide-react"
+import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import type { Email } from "@/components/email-page"
 
-interface DraftDetailProps {
+interface EmailDetailProps {
   email: Email | null
+  emptyMessage?: string
+  showReply?: boolean
+  showReplyAll?: boolean
+  showForward?: boolean
   onToggleStar: (id: string) => void
-  onToggleArchive: (id: string) => void
-  onDeleteDraft: (id: string) => void
+  onToggleArchive?: (id: string) => void
+  onToggleTrash?: (id: string) => void
 }
 
-export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraft }: DraftDetailProps) {
+export function EmailDetail({
+  email,
+  emptyMessage = "Select an email to read",
+  showReply = true,
+  showReplyAll = true,
+  showForward = true,
+  onToggleStar,
+  onToggleArchive,
+  onToggleTrash
+}: EmailDetailProps) {
   const router = useRouter()
+
+  const handleReply = () => {
+    if (email) {
+      router.push(`/compose?reply=${email.id}`)
+    }
+  }
+
+  const handleReplyAll = () => {
+    if (email) {
+      router.push(`/compose?replyAll=${email.id}`)
+    }
+  }
+
+  const handleForward = () => {
+    if (email) {
+      router.push(`/compose?forward=${email.id}`)
+    }
+  }
 
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a draft to read</p>
+        <p className="text-sm">{emptyMessage}</p>
       </div>
     )
-  }
-
-  const handleEditDraft = () => {
-    // Navigate to compose with draft ID as query param
-    router.push(`/compose?draft=${email.id}`)
   }
 
   return (
@@ -39,24 +65,18 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
             <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
-            <Archive className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDeleteDraft(email.id)}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {onToggleArchive && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
+          {onToggleTrash && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleEditDraft}>
-            <Edit className="h-4 w-4" />
-            Edit
-          </Button>
-          <Button size="sm" className="gap-2">
-            <Send className="h-4 w-4" />
-            Send
           </Button>
         </div>
       </div>
@@ -76,7 +96,7 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{email.from}</p>
-                  <p className="text-xs text-muted-foreground">Draft</p>
+                  <p className="text-xs text-muted-foreground">to me</p>
                 </div>
                 <p className="text-xs text-muted-foreground">{email.time}</p>
               </div>
@@ -88,6 +108,28 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
           {/* Email body */}
           <div className="prose prose-sm max-w-none">
             <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 mt-8">
+            {showReply && (
+              <Button size="sm" className="gap-2" onClick={handleReply}>
+                <Reply className="h-4 w-4" />
+                Reply
+              </Button>
+            )}
+            {showReplyAll && (
+              <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={handleReplyAll}>
+                <ReplyAll className="h-4 w-4" />
+                Reply All
+              </Button>
+            )}
+            {showForward && (
+              <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={handleForward}>
+                <Forward className="h-4 w-4" />
+                Forward
+              </Button>
+            )}
           </div>
         </div>
       </div>

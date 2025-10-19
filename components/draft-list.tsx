@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Star, Archive, Trash2, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Email } from "@/app/drafts/page"
+import type { Email } from "@/components/email-page"
 
 interface DraftListProps {
   emails: Email[]

@@ -47,6 +47,14 @@ const [from, setFrom] = useState("")
   const replyParam = searchParams.get("reply")
   const replyEmail = useQuery(api.emails.get, replyParam ? { id: replyParam as any } : "skip")
 
+  // Load original email if forwarding
+  const forwardParam = searchParams.get("forward")
+  const forwardEmail = useQuery(api.emails.get, forwardParam ? { id: forwardParam as any } : "skip")
+
+  // Load original email if reply all
+  const replyAllParam = searchParams.get("replyAll")
+  const replyAllEmail = useQuery(api.emails.get, replyAllParam ? { id: replyAllParam as any } : "skip")
+
   useEffect(() => {
     if (draft && draft.draft) {
       setDraftId(draft._id)
@@ -58,25 +66,71 @@ const [from, setFrom] = useState("")
   }, [draft])
 
   useEffect(() => {
-   if (replyEmail && !draft) { // Only pre-fill if not editing a draft
-     setTo(replyEmail.from || "")
-     setSubject(replyEmail.subject?.startsWith("Re:") ? replyEmail.subject : `Re: ${replyEmail.subject || ""}`)
-     setBody("") // Start with empty body for reply
-     // Pre-select the appropriate from address based on which address received the email
-     if (!from) {
-         // If the original email was sent to one of our addresses, reply from that address
-       const replyToAddress = replyEmail.to;
+  if (replyEmail && !draft) { // Only pre-fill if not editing a draft
+  setTo(replyEmail.from || "")
+  setSubject(replyEmail.subject?.startsWith("Re:") ? replyEmail.subject : `Re: ${replyEmail.subject || ""}`)
+  setBody("") // Start with empty body for reply
+  // Pre-select the appropriate from address based on which address received the email
+  if (!from) {
+  // If the original email was sent to one of our addresses, reply from that address
+  const replyToAddress = replyEmail.to;
+  const matchingFromAddress = FROM_ADDRESSES.find(addr => addr.value === replyToAddress);
+
+  if (matchingFromAddress) {
+  setFrom(matchingFromAddress.value);
+  } else if (FROM_ADDRESSES.length > 0) {
+  // Fallback to first available address
+  setFrom(FROM_ADDRESSES[0].value);
+  }
+  }
+  }
+  }, [replyEmail, draft, from])
+
+  useEffect(() => {
+   if (replyAllEmail && !draft) { // Only pre-fill if not editing a draft
+      // For reply all, same as reply for now (since no CC in schema)
+      setTo(replyAllEmail.from || "")
+      setSubject(replyAllEmail.subject?.startsWith("Re:") ? replyAllEmail.subject : `Re: ${replyAllEmail.subject || ""}`)
+      setBody("") // Start with empty body for reply all
+      // Pre-select the appropriate from address based on which address received the email
+      if (!from) {
+        const replyToAddress = replyAllEmail.to;
         const matchingFromAddress = FROM_ADDRESSES.find(addr => addr.value === replyToAddress);
 
         if (matchingFromAddress) {
           setFrom(matchingFromAddress.value);
         } else if (FROM_ADDRESSES.length > 0) {
-          // Fallback to first available address
           setFrom(FROM_ADDRESSES[0].value);
         }
       }
   }
-  }, [replyEmail, draft, from])
+   }, [replyAllEmail, draft, from])
+
+  useEffect(() => {
+   if (forwardEmail && !draft) { // Only pre-fill if not editing a draft
+      setTo("") // Empty for user to fill
+      setSubject(forwardEmail.subject?.startsWith("Fwd:") ? forwardEmail.subject : `Fwd: ${forwardEmail.subject || ""}`)
+      setBody(`
+
+--- Forwarded message ---
+From: ${forwardEmail.from}
+To: ${forwardEmail.to}
+Subject: ${forwardEmail.subject}
+
+${forwardEmail.body}`)
+      // Pre-select the appropriate from address based on which address received the email
+      if (!from) {
+        const forwardToAddress = forwardEmail.to;
+        const matchingFromAddress = FROM_ADDRESSES.find(addr => addr.value === forwardToAddress);
+
+        if (matchingFromAddress) {
+          setFrom(matchingFromAddress.value);
+        } else if (FROM_ADDRESSES.length > 0) {
+          setFrom(FROM_ADDRESSES[0].value);
+        }
+      }
+  }
+   }, [forwardEmail, draft, from])
 
   const handleSend = async () => {
     if (!from || !to || !subject || !body) return

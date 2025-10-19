@@ -4,41 +4,72 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Star, Archive, Trash2, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Email } from "@/components/inbox-view"
+import type { Email } from "@/components/email-page"
 
-interface InboxListProps {
+interface EmailListProps {
+  title: string
+  countText: string
   emails: Email[]
   selectedEmail: Email | null
   onSelectEmail: (email: Email) => void
   onToggleStar: (id: string) => void
   onToggleArchive?: (id: string) => void
   onToggleTrash?: (id: string) => void
+  showArchiveButton?: boolean
+  showTrashButton?: boolean
 }
 
-export function InboxList({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }: InboxListProps) {
+export function EmailList({
+  title,
+  countText,
+  emails,
+  selectedEmail,
+  onSelectEmail,
+  onToggleStar,
+  onToggleArchive,
+  onToggleTrash,
+  showArchiveButton = true,
+  showTrashButton = true,
+}: EmailListProps) {
   return (
     <div className="w-full lg:w-96 border-r border-border bg-background flex flex-col">
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Inbox</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{emails.filter((e) => !e.read).length} unread</p>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{countText}</p>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-            if (selectedEmail && onToggleArchive) {
-              onToggleArchive(selectedEmail.id)
-            }
-          }} disabled={!selectedEmail}>
-            <Archive className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-          if (selectedEmail && onToggleTrash) {
-              onToggleTrash(selectedEmail.id)
-            }
-          }} disabled={!selectedEmail}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {showArchiveButton && onToggleArchive && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                if (selectedEmail && onToggleArchive) {
+                  onToggleArchive(selectedEmail.id)
+                }
+              }}
+              disabled={!selectedEmail}
+            >
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
+          {showTrashButton && onToggleTrash && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                if (selectedEmail && onToggleTrash) {
+                  onToggleTrash(selectedEmail.id)
+                }
+              }}
+              disabled={!selectedEmail}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -83,7 +114,7 @@ export function InboxList({ emails, selectedEmail, onSelectEmail, onToggleStar, 
                   )}
                 />
               </button>
-              {onToggleArchive && (
+              {showArchiveButton && onToggleArchive && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -98,11 +129,13 @@ export function InboxList({ emails, selectedEmail, onSelectEmail, onToggleStar, 
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className={cn("text-sm truncate", !email.read && "font-semibold")}>{email.from}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{email.time}</span>
+                  <p className={cn("text-sm font-medium truncate", !email.read && "font-semibold")}>
+                    {email.from}
+                  </p>
+                  <span className="text-xs text-muted-foreground shrink-0">{email.time}</span>
                 </div>
-                <p className={cn("text-sm truncate mb-1", !email.read && "font-medium")}>{email.subject}</p>
-                <p className="text-xs text-muted-foreground truncate">{email.preview}</p>
+                <h3 className={cn("text-sm truncate mb-1", !email.read && "font-medium")}>{email.subject}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-2">{email.preview}</p>
               </div>
             </div>
           </div>

@@ -12,19 +12,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
-
-export type Email = {
-  id: string
-  from: string
-  subject: string
-  preview: string
-  time: string
-  read: boolean
-  starred: boolean
-  archived: boolean
-  category: string
-  body: string
-}
+import type { Email } from "@/components/email-page"
 
 export default function DraftsPage() {
   const emails = useQuery(api.emails.listDrafts) as any[] | undefined
@@ -48,17 +36,17 @@ export default function DraftsPage() {
     }
   }
 
-  const handleMarkRead = async (id: string) => {
-    await markRead({ id: id as any })
-    if (selectedEmail?.id === id) {
-      setSelectedEmail({ ...selectedEmail, read: true })
-    }
-  }
-
   const handleDeleteDraft = async (id: string) => {
     await deleteDraft({ id: id as any })
     if (selectedEmail?.id === id) {
       setSelectedEmail(null)
+    }
+  }
+
+  const handleMarkRead = async (id: string) => {
+    await markRead({ id: id as any })
+    if (selectedEmail?.id === id) {
+      setSelectedEmail({ ...selectedEmail, read: true })
     }
   }
 
@@ -71,7 +59,6 @@ export default function DraftsPage() {
           <h1 className="text-lg font-semibold">Drafts</h1>
         </header>
         <div className="flex flex-1">
-          {/* Draft email list */}
           <DraftList
             emails={(emails ?? []).map((e) => ({
               id: e._id,
@@ -81,8 +68,8 @@ export default function DraftsPage() {
               time: new Date(e.receivedAt).toLocaleString(),
               read: e.read,
               starred: e.starred,
-              archived: e.archived ?? false,
-              category: e.category ?? "draft",
+              archived: e.archived,
+              category: e.category ?? "inbox",
               body: e.body,
             }))}
             selectedEmail={selectedEmail}
@@ -95,8 +82,12 @@ export default function DraftsPage() {
             onDeleteDraft={handleDeleteDraft}
           />
 
-          {/* Draft email detail */}
-          <DraftDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} onDeleteDraft={handleDeleteDraft} />
+          <DraftDetail
+            email={selectedEmail}
+            onToggleStar={handleToggleStar}
+            onToggleArchive={handleToggleArchive}
+            onDeleteDraft={handleDeleteDraft}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>
