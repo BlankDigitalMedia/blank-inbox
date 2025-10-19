@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -427,34 +428,36 @@ export function Composer({
         </div>
       </div>
 
-      <div className="shrink-0 flex items-center justify-end gap-2 border-t bg-background px-4 py-2">
+      <div className="shrink-0 flex items-center justify-end border-t bg-background px-4 py-2">
         <div className="mr-auto text-xs text-muted-foreground">
           {autosaveStatus === "saving" && "Saving..."}
           {autosaveStatus === "saved" && "Saved"}
           {autosaveStatus === "error" && "Save failed. Retrying on next change..."}
         </div>
+        <ButtonGroup>
         <Button
           variant="outline"
           size="sm"
-          onClick={async () => {
-            try {
-              await flush()
-            } catch {}
-            onCancel()
-          }}
-          disabled={isSending}
+            onClick={async () => {
+              try {
+                await flush()
+              } catch {}
+              onCancel()
+            }}
+            disabled={isSending}
         >
           <X className="h-4 w-4 mr-2" />
-          Close
-        </Button>
+            Close
+          </Button>
         <Button
           size="sm"
           onClick={handleSend}
-          disabled={!from || !to || !subject || !editor || isSending}
+            disabled={!from || !to || !subject || !editor || isSending}
         >
           <Send className="h-4 w-4 mr-2" />
-          {isSending ? "Sending..." : "Send"}
-        </Button>
+            {isSending ? "Sending..." : "Send"}
+          </Button>
+        </ButtonGroup>
       </div>
     </div>
   )
