@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
 import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { useCompose } from "@/app/providers/compose-provider"
 import type { Email } from "@/components/email-page"
 
 interface EmailDetailProps {
@@ -31,24 +33,7 @@ export function EmailDetail({
   onToggleTrash
 }: EmailDetailProps) {
   const router = useRouter()
-
-  const handleReply = () => {
-    if (email) {
-      router.push(`/compose?reply=${email.id}`)
-    }
-  }
-
-  const handleReplyAll = () => {
-    if (email) {
-      router.push(`/compose?replyAll=${email.id}`)
-    }
-  }
-
-  const handleForward = () => {
-    if (email) {
-      router.push(`/compose?forward=${email.id}`)
-    }
-  }
+  const { openReply, openReplyAll, openForward } = useCompose()
 
   if (!email) {
     return (
@@ -59,9 +44,9 @@ export function EmailDetail({
   }
 
   return (
-    <div className="hidden lg:flex flex-1 flex-col bg-background">
+    <div className="hidden lg:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
       {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b border-border">
+      <div className="p-4 flex items-center justify-between border-b flex-shrink-0 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <ButtonGroup>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
         <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
@@ -83,7 +68,7 @@ export function EmailDetail({
       </div>
 
       {/* Email content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto">
           {/* Subject */}
           <h1 className="text-2xl font-semibold mb-6 text-balance">{email.subject}</h1>
@@ -106,27 +91,44 @@ export function EmailDetail({
 
           <Separator className="mb-6" />
 
-          {/* Email body */}
-          <div className="prose prose-sm max-w-none">
-            <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
-          </div>
+          {/* Thread messages if multiple */}
+          {email.threadCount > 1 ? (
+          <div className="space-y-6">
+              {email.threadEmails.map((threadEmail, index) => (
+                <div key={threadEmail._id} className="border-t border-border pt-4 first:border-t-0 first:pt-0">
+                  <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                    <span className="font-medium">{threadEmail.from}</span>
+                    <span>{new Date(threadEmail.receivedAt).toLocaleString()}</span>
+                  </div>
+                  <div className="prose prose-sm max-w-none">
+                    <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(threadEmail.body)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Single email body */
+            <div className="prose prose-sm max-w-none">
+              <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
+            </div>
+          )}
 
           {/* Actions */}
           <ButtonGroup className="mt-8">
           {showReply && (
-          <Button size="sm" className="gap-2" onClick={handleReply}>
+          <Button size="sm" className="gap-2" onClick={() => openReply(email)}>
           <Reply className="h-4 w-4" />
           Reply
           </Button>
           )}
           {showReplyAll && (
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={handleReplyAll}>
+          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={() => openReplyAll(email)}>
           <ReplyAll className="h-4 w-4" />
           Reply All
           </Button>
           )}
           {showForward && (
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={handleForward}>
+          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={() => openForward(email)}>
           <Forward className="h-4 w-4" />
           Forward
           </Button>

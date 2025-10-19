@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useCompose } from "@/app/providers/compose-provider"
 import {
   Sidebar,
   SidebarContent,
@@ -26,18 +27,18 @@ interface MailSidebarProps {
 }
 
 export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSidebarProps) {
+  const { openNew } = useCompose()
+  
   return (
-    <Sidebar variant="inset">
+    <Sidebar variant="inset" className="h-dvh">
       <SidebarHeader>
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Mail</h1>
           <ThemeToggle />
         </div>
-        <Button asChild className="w-full justify-start gap-2" size="sm">
-          <Link href="/compose">
-            <PenSquare className="h-4 w-4" />
-            Compose
-          </Link>
+        <Button onClick={() => openNew()} className="w-full justify-start gap-2" size="sm">
+          <PenSquare className="h-4 w-4" />
+          Compose
         </Button>
       </SidebarHeader>
 

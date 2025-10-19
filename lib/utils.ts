@@ -25,6 +25,15 @@ export function sanitizeHtml(html: string): string {
   });
 }
 
+// Strip HTML tags from text for plain text display
+export function stripHtml(html: string): string {
+  if (!isHtml(html)) return html;
+  // Create a temporary div element to strip HTML
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  return tempDiv.textContent || tempDiv.innerText || '';
+}
+
 // Render email body content (HTML or plain text)
 export function renderEmailBody(body: string): { __html: string } {
   if (isHtml(body)) {

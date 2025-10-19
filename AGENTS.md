@@ -16,16 +16,25 @@
 - **Routes**: `/` (inbox), `/archive`, `/starred`, `/sent`, `/compose`, `/drafts`, `/trash`
 - **Analytics**: Vercel Analytics for tracking usage
 - **Dependencies**: Additional libraries include react-hook-form, zod (for form validation), cmdk (for search/command palette), date-fns (for date handling), lucide-react (for icons), react-resizable-panels (for resizable layouts), recharts (for data visualization), tailwind-merge (for class merging)
+- **Layout**: Fixed viewport frame with internal scrolling
+  - Root body uses `h-dvh overflow-hidden` to prevent page scroll
+  - Each section (sidebar, email list, detail) has sticky headers with internal `overflow-y-auto` content
+  - All 4 corners of the frame remain visible at all times
+- **Composer**: Unified Composer component handles all email composition
+  - Supports modes: `inline` (for replies within email detail) and `modal` (for new composition via Dialog)
+  - Supports intents: `new`, `reply`, `replyAll`, `forward`
+  - Smart sender selection based on original recipient
+  - Smooth animations and focus management
+  - Located at `components/composer/composer.tsx`
 - **Features**:
   - Email archiving/unarchiving, starring/unstarring, trashing/restoring, multiple view filters
   - HTML email body rendering with DOMPurify sanitization
   - Dynamic unread email count in navigation
   - Chronological sorting (most recent emails first)
-  - Compose new emails with draft saving functionality
-  - Draft management (save, edit, delete drafts)
+  - Unified compose/reply/forward experience with modern UX
   - Reply to emails functionality with pre-filled subject and recipient
-- Reply all to emails functionality with smart sender selection
-- Forward emails functionality with quoted original message
+  - Reply all to emails functionality with smart sender selection
+  - Forward emails functionality with quoted original message
   - Dark/light theme toggle
   - Toast notifications for user feedback (success/error messages)
   - Search input placeholder in sidebar (functionality not yet implemented)
@@ -39,4 +48,4 @@
 - **Linting**: ESLint with Next.js core-web-vitals + TypeScript rules
 - **Naming**: camelCase for variables/functions, PascalCase for components
 - **Error Handling**: Standard try/catch, no custom error boundaries yet
-- **Architecture**: Single shared components (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`) over view-specific duplicates
+- **Architecture**: Single shared components (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates

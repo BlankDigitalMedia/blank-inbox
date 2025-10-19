@@ -150,4 +150,17 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* TipTap editor styles */
+  .tiptap {
+    @apply focus:outline-none;
+  }
+  
+  .tiptap p {
+    @apply my-2;
+  }
+  
+  .tiptap blockquote {
+    @apply border-l-2 border-muted-foreground/30 pl-3 my-2 text-muted-foreground;
+  }
 }

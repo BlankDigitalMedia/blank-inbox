@@ -171,8 +171,9 @@ export const saveDraft = mutation({
     bcc: v.optional(v.string()),
     subject: v.string(),
     body: v.string(),
+    threadId: v.optional(v.string()),
   },
-  handler: async (ctx, { id, from, to, cc, bcc, subject, body }) => {
+  handler: async (ctx, { id, from, to, cc, bcc, subject, body, threadId }) => {
     const preview = body.slice(0, 120) || subject;
     const receivedAt = Date.now();
 
@@ -187,6 +188,7 @@ export const saveDraft = mutation({
         body,
         preview,
         receivedAt,
+        threadId,
       });
       return id;
     } else {
@@ -205,6 +207,7 @@ export const saveDraft = mutation({
         trashed: false,
         draft: true,
         receivedAt,
+        threadId,
         category: "draft",
       });
     }
@@ -303,22 +306,24 @@ export const storeSentEmail = mutation({
     body: v.string(),
     receivedAt: v.number(),
     messageId: v.string(),
+    threadId: v.optional(v.string()),
   },
-  handler: async (ctx, { from, to, cc, bcc, subject, preview, body, receivedAt, messageId }) => {
+  handler: async (ctx, { from, to, cc, bcc, subject, preview, body, receivedAt, messageId, threadId }) => {
     return await ctx.db.insert("emails", {
-      from,
-      to,
-      cc,
-      bcc,
-      subject,
-      preview,
-      body,
-      read: true, // Sent emails are read by default
-      starred: false,
-      archived: false,
-      trashed: false,
-      receivedAt,
-      messageId,
+    from,
+    to,
+    cc,
+    bcc,
+    subject,
+    preview,
+    body,
+    read: true, // Sent emails are read by default
+    starred: false,
+    archived: false,
+    trashed: false,
+    receivedAt,
+    messageId,
+    threadId,
       category: "sent",
     });
   },
@@ -327,6 +332,7 @@ export const storeSentEmail = mutation({
 export const sendEmail = action({
   args: {
     draftId: v.optional(v.id("emails")),
+    originalEmailId: v.optional(v.id("emails")),
     from: v.string(),
     to: v.string(),
     cc: v.optional(v.string()),
@@ -335,28 +341,38 @@ export const sendEmail = action({
     html: v.string(),
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { draftId, from, to, cc, bcc, subject, html, text }): Promise<any> => {
+  handler: async (ctx, { draftId, originalEmailId, from, to, cc, bcc, subject, html, text }): Promise<any> => {
     const apiKey = process.env.NEXT_INBOUND_API_KEY;
     if (!apiKey) throw new Error("NEXT_INBOUND_API_KEY not set");
 
     const inbound = new Inbound(apiKey);
 
-    // Send the email via inbound.new
-    const sendParams: any = {
-      from,
-      to,
-      subject,
-      html,
-      text,
-    };
-    if (cc) sendParams.cc = cc;
-    if (bcc) sendParams.bcc = bcc;
+    let sentData;
+    let threadId: string | undefined;
 
-    const { data, error } = await inbound.email.send(sendParams);
 
-    if (error) {
-      throw new Error(`Failed to send email: ${error}`);
-    }
+      // Regular send
+      const sendParams: any = {
+        from,
+        to,
+        subject,
+        html,
+        text,
+      };
+      if (cc) sendParams.cc = cc;
+      if (bcc) sendParams.bcc = bcc;
+
+      const { data, error } = await inbound.email.send(sendParams);
+      if (error) {
+        throw new Error(`Failed to send email: ${error}`);
+      }
+      sentData = data;
+      
+      // Get threadId if this is a reply
+      if (originalEmailId) {
+        const originalEmail = await ctx.runQuery(api.emails.get, { id: originalEmailId });
+        threadId = originalEmail?.threadId;
+      }
 
     const sentAt = Date.now();
 
@@ -370,7 +386,8 @@ export const sendEmail = action({
       preview: text || html.slice(0, 120),
       body: html,
       receivedAt: sentAt,
-      messageId: data?.messageId || "sent-" + Date.now().toString(),
+      messageId: sentData?.messageId || "sent-" + Date.now().toString(),
+      threadId,
     });
 
     // If this was sent from a draft, delete the draft

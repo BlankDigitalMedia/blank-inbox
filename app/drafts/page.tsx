@@ -58,19 +58,22 @@ export default function DraftsPage() {
           <SidebarTrigger className="-ml-1" />
           <h1 className="text-lg font-semibold">Drafts</h1>
         </header>
-        <div className="flex flex-1">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           <DraftList
             emails={(emails ?? []).map((e) => ({
-              id: e._id,
-              from: e.from,
-              subject: e.subject,
-              preview: e.preview,
-              time: new Date(e.receivedAt).toLocaleString(),
-              read: e.read,
-              starred: e.starred,
-              archived: e.archived,
-              category: e.category ?? "inbox",
-              body: e.body,
+            id: e._id,
+            from: e.from,
+            subject: e.subject,
+            preview: e.preview,
+            time: new Date(e.receivedAt).toLocaleString(),
+            read: e.read,
+            starred: e.starred,
+            archived: e.archived,
+            category: e.category ?? "inbox",
+            body: e.body,
+              threadId: e.threadId,
+              threadCount: 1,
+              threadEmails: [e],
             }))}
             selectedEmail={selectedEmail}
             onSelectEmail={(email) => {

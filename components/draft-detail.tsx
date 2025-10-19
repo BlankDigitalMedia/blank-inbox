@@ -33,7 +33,7 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
   }
 
   return (
-    <div className="hidden lg:flex flex-1 flex-col bg-background">
+    <div className="hidden lg:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
       {/* Header */}
       <div className="p-4 flex items-center justify-between border-b border-border">
         <ButtonGroup>
