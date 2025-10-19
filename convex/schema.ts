@@ -5,6 +5,8 @@ export default defineSchema({
   emails: defineTable({
     from: v.string(),
     to: v.optional(v.string()),
+    cc: v.optional(v.string()),
+    bcc: v.optional(v.string()),
     subject: v.string(),
     preview: v.string(),
     body: v.string(),

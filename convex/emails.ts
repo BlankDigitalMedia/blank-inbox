@@ -167,10 +167,12 @@ export const saveDraft = mutation({
     id: v.optional(v.id("emails")),
     from: v.string(),
     to: v.optional(v.string()),
+    cc: v.optional(v.string()),
+    bcc: v.optional(v.string()),
     subject: v.string(),
     body: v.string(),
   },
-  handler: async (ctx, { id, from, to, subject, body }) => {
+  handler: async (ctx, { id, from, to, cc, bcc, subject, body }) => {
     const preview = body.slice(0, 120) || subject;
     const receivedAt = Date.now();
 
@@ -179,6 +181,8 @@ export const saveDraft = mutation({
       await ctx.db.patch(id, {
         from,
         to,
+        cc,
+        bcc,
         subject,
         body,
         preview,
@@ -190,6 +194,8 @@ export const saveDraft = mutation({
       return await ctx.db.insert("emails", {
         from,
         to,
+        cc,
+        bcc,
         subject,
         preview,
         body,
@@ -223,6 +229,30 @@ export const upsertFromInbound = internalMutation({
     // Extract email data from inbound.new webhook structure
     const from = email?.from?.text || email?.from || "Unknown";
     const to = email?.to?.text || email?.to || email?.recipient || undefined;
+
+    // Extract CC/BCC - Note: inbound.new may not include CC/BCC in webhook payloads for privacy reasons
+    let cc = email?.cc?.text || email?.cc;
+    let bcc = email?.bcc?.text || email?.bcc;
+
+    // If CC/BCC are arrays of objects (like some email service formats), extract email addresses
+    if (Array.isArray(email?.cc)) {
+      cc = email.cc.map((item: any) => item?.email || item?.address || item).filter(Boolean).join(', ');
+    }
+    if (Array.isArray(email?.bcc)) {
+      bcc = email.bcc.map((item: any) => item?.email || item?.address || item).filter(Boolean).join(', ');
+    }
+
+    // Handle parsedData if it contains CC/BCC info
+    if (email?.parsedData?.cc && !cc) {
+      cc = Array.isArray(email.parsedData.cc)
+        ? email.parsedData.cc.join(', ')
+        : email.parsedData.cc;
+    }
+    if (email?.parsedData?.bcc && !bcc) {
+      bcc = Array.isArray(email.parsedData.bcc)
+        ? email.parsedData.bcc.join(', ')
+        : email.parsedData.bcc;
+    }
     const subject = email?.subject || "(no subject)";
     const body = email?.cleanedContent?.html || email?.cleanedContent?.text || email?.html || email?.text || "";
     const preview = email?.cleanedContent?.text?.slice(0, 120) || body.slice(0, 120) || subject;
@@ -244,6 +274,8 @@ export const upsertFromInbound = internalMutation({
     return await ctx.db.insert("emails", {
       from,
       to,
+      cc,
+      bcc,
       subject,
       preview,
       body,
@@ -264,16 +296,20 @@ export const storeSentEmail = mutation({
   args: {
     from: v.string(),
     to: v.string(),
+    cc: v.optional(v.string()),
+    bcc: v.optional(v.string()),
     subject: v.string(),
     preview: v.string(),
     body: v.string(),
     receivedAt: v.number(),
     messageId: v.string(),
   },
-  handler: async (ctx, { from, to, subject, preview, body, receivedAt, messageId }) => {
+  handler: async (ctx, { from, to, cc, bcc, subject, preview, body, receivedAt, messageId }) => {
     return await ctx.db.insert("emails", {
       from,
       to,
+      cc,
+      bcc,
       subject,
       preview,
       body,
@@ -293,24 +329,30 @@ export const sendEmail = action({
     draftId: v.optional(v.id("emails")),
     from: v.string(),
     to: v.string(),
+    cc: v.optional(v.string()),
+    bcc: v.optional(v.string()),
     subject: v.string(),
     html: v.string(),
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { draftId, from, to, subject, html, text }): Promise<any> => {
+  handler: async (ctx, { draftId, from, to, cc, bcc, subject, html, text }): Promise<any> => {
     const apiKey = process.env.NEXT_INBOUND_API_KEY;
     if (!apiKey) throw new Error("NEXT_INBOUND_API_KEY not set");
 
     const inbound = new Inbound(apiKey);
 
     // Send the email via inbound.new
-    const { data, error } = await inbound.email.send({
+    const sendParams: any = {
       from,
       to,
       subject,
       html,
       text,
-    });
+    };
+    if (cc) sendParams.cc = cc;
+    if (bcc) sendParams.bcc = bcc;
+
+    const { data, error } = await inbound.email.send(sendParams);
 
     if (error) {
       throw new Error(`Failed to send email: ${error}`);
@@ -322,6 +364,8 @@ export const sendEmail = action({
     const sentEmailId = await ctx.runMutation(api.emails.storeSentEmail, {
       from,
       to,
+      cc,
+      bcc,
       subject,
       preview: text || html.slice(0, 120),
       body: html,

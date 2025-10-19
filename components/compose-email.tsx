@@ -27,7 +27,9 @@ export function ComposeEmail() {
     { value: "info@daveblank.dev", label: "info@daveblank.dev" },
   ]
 const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
+const [to, setTo] = useState("")
+const [cc, setCc] = useState("")
+const [bcc, setBcc] = useState("")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [isSending, setIsSending] = useState(false)
@@ -60,6 +62,8 @@ const [from, setFrom] = useState("")
       setDraftId(draft._id)
       setFrom(draft.from || "")
       setTo(draft.to || "")
+      setCc(draft.cc || "")
+      setBcc(draft.bcc || "")
       setSubject(draft.subject || "")
       setBody(draft.body || "")
     }
@@ -88,13 +92,43 @@ const [from, setFrom] = useState("")
 
   useEffect(() => {
    if (replyAllEmail && !draft) { // Only pre-fill if not editing a draft
-      // For reply all, same as reply for now (since no CC in schema)
-      setTo(replyAllEmail.from || "")
+      // Build reply all recipients
+      const recipients = new Set<string>();
+
+      // Add original sender if not one of our addresses
+      const ourAddresses = FROM_ADDRESSES.map(addr => addr.value);
+      if (replyAllEmail.from && !ourAddresses.includes(replyAllEmail.from)) {
+        recipients.add(replyAllEmail.from);
+      }
+
+      // Add all 'to' recipients except our addresses
+      if (replyAllEmail.to) {
+        const toAddresses = replyAllEmail.to.split(',').map(addr => addr.trim());
+        toAddresses.forEach(addr => {
+          if (!ourAddresses.includes(addr)) {
+            recipients.add(addr);
+          }
+        });
+      }
+
+      // Add all 'cc' recipients except our addresses
+      if (replyAllEmail.cc) {
+        const ccAddresses = replyAllEmail.cc.split(',').map(addr => addr.trim());
+        ccAddresses.forEach(addr => {
+          if (!ourAddresses.includes(addr)) {
+            recipients.add(addr);
+          }
+        });
+      }
+
+      // Note: BCC recipients are not included in reply all as they shouldn't see each other
+
+      setTo(Array.from(recipients).join(', '))
       setSubject(replyAllEmail.subject?.startsWith("Re:") ? replyAllEmail.subject : `Re: ${replyAllEmail.subject || ""}`)
       setBody("") // Start with empty body for reply all
       // Pre-select the appropriate from address based on which address received the email
       if (!from) {
-        const replyToAddress = replyAllEmail.to;
+        const replyToAddress = replyAllEmail.to?.split(',')[0]?.trim();
         const matchingFromAddress = FROM_ADDRESSES.find(addr => addr.value === replyToAddress);
 
         if (matchingFromAddress) {
@@ -143,6 +177,8 @@ ${forwardEmail.body}`)
       const sendParams: any = {
         from,
         to,
+        cc: cc || undefined,
+        bcc: bcc || undefined,
         subject,
         html: `<div>${htmlBody}</div>`,
         text: body,
@@ -172,6 +208,8 @@ ${forwardEmail.body}`)
       const draftData: any = {
         from: from || "",
         to: to || "",
+        cc: cc || "",
+        bcc: bcc || "",
         subject: subject || "",
         body: body || "",
       }
@@ -229,13 +267,35 @@ ${forwardEmail.body}`)
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
+          <Label htmlFor="to">To</Label>
+          <Input
+          id="to"
+          type="email"
+          placeholder="recipient@example.com"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          />
+          </div>
+
+          <div className="space-y-2">
+          <Label htmlFor="cc">CC</Label>
+          <Input
+          id="cc"
+          type="email"
+          placeholder="cc@example.com"
+          value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bcc">BCC</Label>
             <Input
-              id="to"
+              id="bcc"
               type="email"
-              placeholder="recipient@example.com"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
+              placeholder="bcc@example.com"
+              value={bcc}
+              onChange={(e) => setBcc(e.target.value)}
             />
           </div>
 

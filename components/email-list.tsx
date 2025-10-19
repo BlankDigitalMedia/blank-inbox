@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Separator } from "@/components/ui/separator"
 import { Star, Archive, Trash2, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -39,41 +40,41 @@ export function EmailList({
           <h2 className="text-sm font-semibold">{title}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{countText}</p>
         </div>
-        <div className="flex items-center gap-1">
-          {showArchiveButton && onToggleArchive && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                if (selectedEmail && onToggleArchive) {
-                  onToggleArchive(selectedEmail.id)
-                }
-              }}
-              disabled={!selectedEmail}
-            >
-              <Archive className="h-4 w-4" />
-            </Button>
-          )}
-          {showTrashButton && onToggleTrash && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                if (selectedEmail && onToggleTrash) {
-                  onToggleTrash(selectedEmail.id)
-                }
-              }}
-              disabled={!selectedEmail}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
+        <ButtonGroup>
+        {showArchiveButton && onToggleArchive && (
+        <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => {
+        if (selectedEmail && onToggleArchive) {
+        onToggleArchive(selectedEmail.id)
+        }
+        }}
+        disabled={!selectedEmail}
+        >
+        <Archive className="h-4 w-4" />
+        </Button>
+        )}
+        {showTrashButton && onToggleTrash && (
+        <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => {
+        if (selectedEmail && onToggleTrash) {
+        onToggleTrash(selectedEmail.id)
+        }
+        }}
+        disabled={!selectedEmail}
+        >
+        <Trash2 className="h-4 w-4" />
+        </Button>
+        )}
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <MoreHorizontal className="h-4 w-4" />
+        </Button>
+        </ButtonGroup>
       </div>
 
       <Separator />

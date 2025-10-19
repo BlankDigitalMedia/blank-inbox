@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Edit, Send, MoreHorizontal } from "lucide-react"
@@ -35,30 +36,30 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
     <div className="hidden lg:flex flex-1 flex-col bg-background">
       {/* Header */}
       <div className="p-4 flex items-center justify-between border-b border-border">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
-            <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
-            <Archive className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDeleteDraft(email.id)}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleEditDraft}>
-            <Edit className="h-4 w-4" />
-            Edit
-          </Button>
-          <Button size="sm" className="gap-2">
-            <Send className="h-4 w-4" />
-            Send
-          </Button>
-        </div>
+        <ButtonGroup>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
+        <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
+        <Archive className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDeleteDraft(email.id)}>
+        <Trash2 className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <MoreHorizontal className="h-4 w-4" />
+        </Button>
+        </ButtonGroup>
+        <ButtonGroup>
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleEditDraft}>
+        <Edit className="h-4 w-4" />
+        Edit
+        </Button>
+        <Button size="sm" className="gap-2">
+        <Send className="h-4 w-4" />
+        Send
+        </Button>
+        </ButtonGroup>
       </div>
 
       {/* Email content */}
