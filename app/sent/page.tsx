@@ -12,18 +12,16 @@ export default function SentPage() {
       activeView="sent"
       query={api.emails.listSent}
       ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }) => (
-        <EmailList
-          title="Sent"
-          countText={`${emails.length} sent`}
-          emails={emails}
-          selectedEmail={selectedEmail}
-          onSelectEmail={onSelectEmail}
-          onToggleStar={onToggleStar}
-          onToggleArchive={onToggleArchive}
-          onToggleTrash={onToggleTrash}
-          showArchiveButton={true}
-          showTrashButton={true}
-        />
+      <EmailList
+      emails={emails}
+      selectedEmail={selectedEmail}
+      onSelectEmail={onSelectEmail}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+      onToggleTrash={onToggleTrash}
+      showArchiveButton={true}
+      showTrashButton={true}
+      />
       )}
       DetailComponent={({ email, onToggleStar, onToggleArchive, onToggleTrash }) => (
         <EmailDetail

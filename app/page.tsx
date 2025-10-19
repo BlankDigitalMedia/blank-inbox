@@ -12,18 +12,16 @@ export default function Page() {
       activeView="inbox"
       query={api.emails.list}
       ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }) => (
-        <EmailList
-          title="Inbox"
-          countText={`${emails.filter((e: any) => !e.read).length} unread`}
-          emails={emails}
-          selectedEmail={selectedEmail}
-          onSelectEmail={onSelectEmail}
-          onToggleStar={onToggleStar}
-          onToggleArchive={onToggleArchive}
-          onToggleTrash={onToggleTrash}
-          showArchiveButton={true}
-          showTrashButton={true}
-        />
+      <EmailList
+      emails={emails}
+      selectedEmail={selectedEmail}
+      onSelectEmail={onSelectEmail}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+      onToggleTrash={onToggleTrash}
+      showArchiveButton={true}
+      showTrashButton={true}
+      />
       )}
       DetailComponent={EmailDetail}
       shouldRemoveOnToggle={(action, email) => {

@@ -12,18 +12,16 @@ export default function StarredPage() {
       activeView="starred"
       query={api.emails.listStarred}
       ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }) => (
-        <EmailList
-          title="Starred"
-          countText={`${emails.length} starred`}
-          emails={emails}
-          selectedEmail={selectedEmail}
-          onSelectEmail={onSelectEmail}
-          onToggleStar={onToggleStar}
-          onToggleArchive={onToggleArchive}
-          onToggleTrash={onToggleTrash}
-          showArchiveButton={true}
-          showTrashButton={true}
-        />
+      <EmailList
+      emails={emails}
+      selectedEmail={selectedEmail}
+      onSelectEmail={onSelectEmail}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+      onToggleTrash={onToggleTrash}
+      showArchiveButton={true}
+      showTrashButton={true}
+      />
       )}
       DetailComponent={({ email, onToggleStar, onToggleArchive, onToggleTrash }) => (
         <EmailDetail

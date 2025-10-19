@@ -12,18 +12,16 @@ export default function TrashPage() {
       activeView="trash"
       query={api.emails.listTrashed}
       ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }) => (
-        <EmailList
-          title="Trash"
-          countText={`${emails.length} trashed`}
-          emails={emails}
-          selectedEmail={selectedEmail}
-          onSelectEmail={onSelectEmail}
-          onToggleStar={onToggleStar}
-          onToggleArchive={onToggleArchive}
-          onToggleTrash={onToggleTrash}
-          showArchiveButton={true}
-          showTrashButton={false} // Trash view doesn't need trash button
-        />
+      <EmailList
+      emails={emails}
+      selectedEmail={selectedEmail}
+      onSelectEmail={onSelectEmail}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+      onToggleTrash={onToggleTrash}
+      showArchiveButton={true}
+      showTrashButton={false} // Trash view doesn't need trash button
+      />
       )}
       DetailComponent={({ email, onToggleStar, onToggleArchive, onToggleTrash }) => (
         <EmailDetail

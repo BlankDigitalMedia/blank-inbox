@@ -106,20 +106,20 @@ export function SharedEmailListItem({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <p className={cn("text-sm font-medium truncate", useReadStyling && !email.read && "font-semibold")}>
-              {email.from}
-            </p>
-            <span className="text-xs text-muted-foreground shrink-0">{email.time}</span>
+          <p className={cn("text-sm font-medium truncate", isSelected && "text-accent-foreground", useReadStyling && !email.read && "font-semibold")}>
+          {email.from}
+          </p>
+          <span className={cn("text-xs text-muted-foreground shrink-0", isSelected && "text-accent-foreground")}>{email.time}</span>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className={cn("text-sm truncate", useReadStyling && !email.read && "font-medium")}>{email.subject}</h3>
-            {email.threadCount > 1 && (
-              <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">
-                {email.threadCount}
-              </span>
-            )}
+          <h3 className={cn("text-sm truncate", isSelected && "text-accent-foreground", useReadStyling && !email.read && "font-medium")}>{email.subject}</h3>
+          {email.threadCount > 1 && (
+          <span className={cn("text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0", isSelected && "bg-accent-foreground/20 text-accent-foreground")}>
+          {email.threadCount}
+          </span>
+          )}
           </div>
-          <p className="text-xs text-muted-foreground line-clamp-2">{stripHtml(email.preview)}</p>
+          <p className={cn("text-xs text-muted-foreground line-clamp-2", isSelected && "text-accent-foreground")}>{stripHtml(email.preview)}</p>
         </div>
       </div>
     </div>
