@@ -19,11 +19,11 @@ import {
 } from "@/components/ui/sidebar"
 import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare } from "lucide-react"
 
-interface InboxSidebarProps {
+interface StarredSidebarProps {
   onClose?: () => void
 }
 
-export function InboxSidebar({ onClose }: InboxSidebarProps) {
+export function StarredSidebar({ onClose }: StarredSidebarProps) {
   return (
     <Sidebar variant="inset">
       <SidebarHeader>
@@ -49,14 +49,15 @@ export function InboxSidebar({ onClose }: InboxSidebarProps) {
             <Separator />
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <Inbox className="h-4 w-4" />
-                  <span>Inbox</span>
-                  <SidebarMenuBadge>12</SidebarMenuBadge>
+                <SidebarMenuButton asChild>
+                  <Link href="/">
+                    <Inbox className="h-4 w-4" />
+                    <span>Inbox</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild isActive>
                   <Link href="/starred">
                     <Star className="h-4 w-4" />
                     <span>Starred</span>

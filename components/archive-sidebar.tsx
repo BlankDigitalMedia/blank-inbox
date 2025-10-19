@@ -19,11 +19,11 @@ import {
 } from "@/components/ui/sidebar"
 import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare } from "lucide-react"
 
-interface InboxSidebarProps {
+interface ArchiveSidebarProps {
   onClose?: () => void
 }
 
-export function InboxSidebar({ onClose }: InboxSidebarProps) {
+export function ArchiveSidebar({ onClose }: ArchiveSidebarProps) {
   return (
     <Sidebar variant="inset">
       <SidebarHeader>
@@ -49,18 +49,17 @@ export function InboxSidebar({ onClose }: InboxSidebarProps) {
             <Separator />
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <Inbox className="h-4 w-4" />
-                  <span>Inbox</span>
-                  <SidebarMenuBadge>12</SidebarMenuBadge>
+                <SidebarMenuButton asChild>
+                  <Link href="/">
+                    <Inbox className="h-4 w-4" />
+                    <span>Inbox</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/starred">
-                    <Star className="h-4 w-4" />
-                    <span>Starred</span>
-                  </Link>
+                <SidebarMenuButton>
+                  <Star className="h-4 w-4" />
+                  <span>Starred</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -76,7 +75,7 @@ export function InboxSidebar({ onClose }: InboxSidebarProps) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild isActive>
                   <Link href="/archive">
                     <Archive className="h-4 w-4" />
                     <span>Archive</span>

@@ -7,6 +7,33 @@ export const list = query({
     const emails = await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
+      .filter((q) => q.neq(q.field("archived"), true))
+      .order("desc")
+      .collect();
+    return emails;
+  },
+});
+
+export const listArchived = query({
+  args: {},
+  handler: async (ctx) => {
+    const emails = await ctx.db
+      .query("emails")
+      .withIndex("by_receivedAt")
+      .filter((q) => q.eq(q.field("archived"), true))
+      .order("desc")
+      .collect();
+    return emails;
+  },
+});
+
+export const listStarred = query({
+  args: {},
+  handler: async (ctx) => {
+    const emails = await ctx.db
+      .query("emails")
+      .withIndex("by_receivedAt")
+      .filter((q) => q.eq(q.field("starred"), true))
       .order("desc")
       .collect();
     return emails;
@@ -37,6 +64,15 @@ export const markRead = mutation({
     if (!email.read) {
       await ctx.db.patch(id, { read: true });
     }
+  },
+});
+
+export const toggleArchive = mutation({
+  args: { id: v.id("emails") },
+  handler: async (ctx, { id }) => {
+    const email = await ctx.db.get(id);
+    if (!email) return;
+    await ctx.db.patch(id, { archived: !(email.archived ?? false) });
   },
 });
 
@@ -75,6 +111,7 @@ export const upsertFromInbound = internalMutation({
       body,
       read: false,
       starred: false,
+      archived: false,
       receivedAt,
       messageId,
       threadId,

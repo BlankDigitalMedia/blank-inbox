@@ -10,6 +10,7 @@ export default defineSchema({
     body: v.string(),
     read: v.boolean(),
     starred: v.boolean(),
+    archived: v.optional(v.boolean()),
     receivedAt: v.number(),
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),

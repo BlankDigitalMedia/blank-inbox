@@ -5,19 +5,19 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Email } from "@/components/inbox-view"
+import type { Email } from "@/app/archive/page"
 
-interface InboxDetailProps {
+interface ArchiveDetailProps {
   email: Email | null
   onToggleStar: (id: string) => void
-  onToggleArchive?: (id: string) => void
+  onToggleArchive: (id: string) => void
 }
 
-export function InboxDetail({ email, onToggleStar, onToggleArchive }: InboxDetailProps) {
+export function ArchiveDetail({ email, onToggleStar, onToggleArchive }: ArchiveDetailProps) {
   if (!email) {
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select an email to read</p>
+        <p className="text-sm">Select an archived email to read</p>
       </div>
     )
   }
@@ -30,7 +30,7 @@ export function InboxDetail({ email, onToggleStar, onToggleArchive }: InboxDetai
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
             <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive?.(email.id)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
             <Archive className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">

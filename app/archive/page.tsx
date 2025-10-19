@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { InboxSidebar } from "@/components/inbox-sidebar"
-import { InboxList } from "@/components/inbox-list"
-import { InboxDetail } from "@/components/inbox-detail"
+import { ArchiveSidebar } from "@/components/archive-sidebar"
+import { ArchiveList } from "@/components/archive-list"
+import { ArchiveDetail } from "@/components/archive-detail"
 import { Button } from "@/components/ui/button"
 import {
   SidebarInset,
@@ -21,19 +21,19 @@ export type Email = {
   time: string
   read: boolean
   starred: boolean
+  archived: boolean
   category: string
   body: string
 }
 
-export function InboxView() {
-  const emails = useQuery(api.emails.list) as any[] | undefined
+export default function ArchivePage() {
+  const emails = useQuery(api.emails.listArchived) as any[] | undefined
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
   const markRead = useMutation(api.emails.markRead)
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
-    // optimistic updates can be added later; MVP just mutate
     await toggleStar({ id: id as any })
     if (selectedEmail?._id === id) {
       setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
@@ -42,7 +42,7 @@ export function InboxView() {
 
   const handleToggleArchive = async (id: string) => {
     await toggleArchive({ id: id as any })
-    // Remove from selected email if archived
+    // Remove from selected email if unarchived (moved back to inbox)
     if (selectedEmail?._id === id) {
       setSelectedEmail(null)
     }
@@ -57,14 +57,15 @@ export function InboxView() {
 
   return (
     <SidebarProvider>
-      <InboxSidebar />
+      <ArchiveSidebar />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
+          <h1 className="text-lg font-semibold">Archive</h1>
         </header>
         <div className="flex flex-1">
-          {/* Email list */}
-          <InboxList
+          {/* Archived email list */}
+          <ArchiveList
             emails={(emails ?? []).map((e) => ({
               id: e._id,
               from: e.from,
@@ -73,6 +74,7 @@ export function InboxView() {
               time: new Date(e.receivedAt).toLocaleString(),
               read: e.read,
               starred: e.starred,
+              archived: e.archived,
               category: e.category ?? "inbox",
               body: e.body,
             }))}
@@ -85,8 +87,8 @@ export function InboxView() {
             onToggleArchive={handleToggleArchive}
           />
 
-          {/* Email detail */}
-          <InboxDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} />
+          {/* Archived email detail */}
+          <ArchiveDetail email={selectedEmail} onToggleStar={handleToggleStar} onToggleArchive={handleToggleArchive} />
         </div>
       </SidebarInset>
     </SidebarProvider>
