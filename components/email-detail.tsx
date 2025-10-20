@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { ButtonGroup } from "@/components/ui/button-group"
+import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
@@ -44,30 +44,8 @@ export function EmailDetail({
   }
 
   return (
-    <div className="hidden lg:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b flex-shrink-0 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <ButtonGroup>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleStar(email.id)}>
-        <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
-        </Button>
-        {onToggleArchive && (
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleArchive(email.id)}>
-        <Archive className="h-4 w-4" />
-        </Button>
-        )}
-        {onToggleTrash && (
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleTrash(email.id)}>
-        <Trash2 className="h-4 w-4" />
-        </Button>
-        )}
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-        <MoreHorizontal className="h-4 w-4" />
-        </Button>
-        </ButtonGroup>
-      </div>
-
-      {/* Email content */}
+  <div className="hidden lg:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
+  {/* Email content */}
       <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto">
           {/* Subject */}
@@ -114,26 +92,44 @@ export function EmailDetail({
           )}
 
           {/* Actions */}
-          <ButtonGroup className="mt-8">
-          {showReply && (
-          <Button size="sm" className="gap-2" onClick={() => openReply(email)}>
-          <Reply className="h-4 w-4" />
-          Reply
-          </Button>
-          )}
-          {showReplyAll && (
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={() => openReplyAll(email)}>
-          <ReplyAll className="h-4 w-4" />
-          Reply All
-          </Button>
-          )}
-          {showForward && (
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={() => openForward(email)}>
-          <Forward className="h-4 w-4" />
-          Forward
-          </Button>
-          )}
+          <ButtonGroup className="mt-8 bg-background/10">
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleStar(email.id)}>
+              <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
+            </Button>
+            {onToggleArchive && (
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleArchive(email.id)}>
+              <Archive className="h-4 w-4" />
+            </Button>
+            )}
+            {onToggleTrash && (
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleTrash(email.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            )}
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+            <ButtonGroupSeparator />
+            {showReply && (
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReply(email)}>
+              <Reply className="h-4 w-4" />
+              Reply
+            </Button>
+            )}
+            {showReplyAll && (
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReplyAll(email)}>
+              <ReplyAll className="h-4 w-4" />
+              Reply All
+            </Button>
+            )}
+            {showForward && (
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openForward(email)}>
+              <Forward className="h-4 w-4" />
+              Forward
+            </Button>
+            )}
           </ButtonGroup>
+
         </div>
       </div>
     </div>
