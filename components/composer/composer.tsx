@@ -1,14 +1,27 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import {
+  Fragment,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { useAction, useMutation } from "convex/react"
+import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Send, X } from "lucide-react"
 import { toast } from "sonner"
@@ -16,11 +29,48 @@ import { cn, sanitizeHtml } from "@/lib/utils"
 import { useCompose } from "@/app/providers/compose-provider"
 import type { Email } from "@/components/email-page"
 import DOMPurify from 'dompurify'
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const FROM_ADDRESSES = [
   { value: "hi@daveblank.dev", label: "hi@daveblank.dev" },
   { value: "info@daveblank.dev", label: "info@daveblank.dev" },
 ]
+
+const ADDRESS_DELIMITER_REGEX = /[,;\n]+/
+
+const parseRecipientValue = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const angleMatch = trimmed.match(/<([^>]+)>/)
+  const raw = angleMatch ? angleMatch[1] : trimmed
+  const sanitized = raw.replace(/^[\s,;"']+|[\s,;"']+$/g, "")
+  if (!sanitized) return null
+  return sanitized
+}
+
+const parseRecipientList = (value?: string) => {
+  if (!value) return []
+  return value
+    .split(ADDRESS_DELIMITER_REGEX)
+    .map(parseRecipientValue)
+    .filter((addr): addr is string => Boolean(addr))
+}
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+type RecipientMutationResult = {
+  added: string[]
+  invalid: string[]
+}
+
+type ContactSuggestion = {
+  address: string
+  name?: string
+  lastSeen: number
+  count: number
+}
 
 interface ComposerProps {
   mode: "inline" | "modal"
@@ -56,7 +106,8 @@ export function Composer({
   onCancel,
 }: ComposerProps) {
   const [from, setFrom] = useState(initialFrom || email?.from || "")
-  const [to, setTo] = useState(initialTo || email?.to || "")
+  const [toRecipients, setToRecipients] = useState<string[]>(() => parseRecipientList(initialTo || email?.to))
+  const [toInput, setToInput] = useState("")
   const [cc, setCc] = useState(initialCc || email?.cc || "")
   const [bcc, setBcc] = useState(initialBcc || email?.bcc || "")
   const [subject, setSubject] = useState(initialSubject || email?.subject || "")
@@ -65,7 +116,14 @@ export function Composer({
   const [showBcc, setShowBcc] = useState(false)
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(initialDraftId)
+  const [isToFocused, setIsToFocused] = useState(false)
+  const [showRecent, setShowRecent] = useState(false)
+  const [suppressSuggestions, setSuppressSuggestions] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const toFieldRef = useRef<HTMLDivElement>(null)
+  const toInputRef = useRef<HTMLInputElement>(null)
+  const suggestionsRef = useRef<HTMLDivElement>(null)
+  const recentTimerRef = useRef<number | null>(null)
   const inflightRef = useRef<Promise<any> | null>(null)
   const queuedRef = useRef(false)
   const debounced = useRef<number | null>(null)
@@ -73,6 +131,126 @@ export function Composer({
   const { update } = useCompose()
   const sendEmail = useAction(api.emails.sendEmail)
   const saveDraftMutation = useMutation(api.emails.saveDraft)
+  const toValue = useMemo(() => toRecipients.join(", "), [toRecipients])
+  const contacts = useQuery(api.emails.contacts)
+
+  const selectedRecipients = useMemo(() => {
+    return new Set(toRecipients.map((recipient) => recipient.toLowerCase()))
+  }, [toRecipients])
+
+  const toInputQuery = useMemo(() => toInput.trim().toLowerCase(), [toInput])
+  const queryReady = toInputQuery.length > 0
+
+  const filteredContacts = useMemo(() => {
+    if (!contacts || !queryReady) return [] as Array<ContactSuggestion & { rank: number }>
+
+    const ranked: Array<ContactSuggestion & { rank: number }> = []
+
+    for (const contact of contacts) {
+      if (!contact?.address) continue
+      if (selectedRecipients.has(contact.address.toLowerCase())) continue
+
+      const email = contact.address.toLowerCase()
+      const name = contact.name?.toLowerCase() ?? ""
+
+      if (email.startsWith(toInputQuery)) {
+        ranked.push({ ...contact, rank: 0 })
+        continue
+      }
+
+      if (name && name.startsWith(toInputQuery)) {
+        ranked.push({ ...contact, rank: 1 })
+        continue
+      }
+
+      const emailIndex = email.indexOf(toInputQuery)
+      if (emailIndex !== -1) {
+        ranked.push({ ...contact, rank: 2 + emailIndex })
+        continue
+      }
+
+      if (name) {
+        const nameIndex = name.indexOf(toInputQuery)
+        if (nameIndex !== -1) {
+          ranked.push({ ...contact, rank: 3 + nameIndex })
+        }
+      }
+    }
+
+    return ranked
+      .sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank - b.rank
+        if (b.count !== a.count) return b.count - a.count
+        if (b.lastSeen !== a.lastSeen) return b.lastSeen - a.lastSeen
+        return a.address.localeCompare(b.address)
+      })
+      .slice(0, 5)
+  }, [contacts, queryReady, selectedRecipients, toInputQuery])
+
+  const recentContacts = useMemo(() => {
+    if (!contacts) return [] as ContactSuggestion[]
+
+    const filtered = contacts.filter((contact) => {
+      if (!contact?.address) return false
+      return !selectedRecipients.has(contact.address.toLowerCase())
+    })
+
+    return filtered.slice(0, 5)
+  }, [contacts, selectedRecipients])
+
+  const showEmptyState = queryReady && filteredContacts.length === 0
+
+  const shouldShowDropdown = Boolean(
+    isToFocused &&
+      !suppressSuggestions &&
+      contacts &&
+      ((queryReady && (filteredContacts.length > 0 || showEmptyState)) || (showRecent && recentContacts.length > 0))
+  )
+
+  const highlightMatch = useCallback(
+    (value: string, query: string): ReactNode => {
+      if (!query) return value
+      const index = value.toLowerCase().indexOf(query)
+      if (index === -1) return value
+      const end = index + query.length
+      return (
+        <Fragment>
+          {value.slice(0, index)}
+          <span className="font-semibold text-foreground">{value.slice(index, end)}</span>
+          {value.slice(end)}
+        </Fragment>
+      )
+    },
+    []
+  )
+
+  const getContactInitials = useCallback((contact: ContactSuggestion) => {
+    if (contact.name) {
+      const parts = contact.name
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+      const initials = parts.map((part) => part[0] ?? "").join("")
+      if (initials) return initials.toUpperCase()
+    }
+    const firstChar = contact.address?.[0]
+    return firstChar ? firstChar.toUpperCase() : "?"
+  }, [])
+
+  const clearRecentTimer = useCallback(() => {
+    if (recentTimerRef.current !== null) {
+      window.clearTimeout(recentTimerRef.current)
+      recentTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleRecentSuggestions = useCallback(() => {
+    clearRecentTimer()
+    recentTimerRef.current = window.setTimeout(() => {
+      setShowRecent(true)
+    }, 200)
+  }, [clearRecentTimer])
 
   // Build initial editor content with quoted HTML for replies/forwards
   const getInitialContent = useCallback(() => {
@@ -125,45 +303,57 @@ export function Composer({
   }, [intent, from])
 
   useEffect(() => {
+    if (typeof initialTo === "string") {
+      setToRecipients(parseRecipientList(initialTo))
+      setToInput("")
+    }
+  }, [initialTo])
+
+  useEffect(() => {
     if (!email) return
 
-    const receivedTo = email.to?.split(',')[0]?.trim()
+    const firstTo = email.to?.split(',')[0]
+    const receivedTo = firstTo ? parseRecipientValue(firstTo) : null
     const matchingFrom = FROM_ADDRESSES.find(addr => addr.value === receivedTo)
     setFrom(matchingFrom?.value || FROM_ADDRESSES[0]?.value || "")
 
     if (intent === 'reply') {
-      setTo(email.from || "")
+      setToRecipients(email?.from ? parseRecipientList(email.from) : [])
+      setToInput("")
       setSubject(email.subject?.startsWith("Re:") ? email.subject : `Re: ${email.subject || ""}`)
     } else if (intent === 'replyAll') {
       const recipients = new Set<string>()
       const ourAddresses = FROM_ADDRESSES.map(addr => addr.value)
       
-      if (email.from && !ourAddresses.includes(email.from)) {
-        recipients.add(email.from)
+      const fromAddress = email.from ? parseRecipientValue(email.from) : null
+      if (fromAddress && !ourAddresses.includes(fromAddress)) {
+        recipients.add(fromAddress)
       }
       
       if (email.to) {
         email.to.split(',').forEach(addr => {
-          const trimmed = addr.trim()
-          if (!ourAddresses.includes(trimmed)) {
-            recipients.add(trimmed)
+          const parsed = parseRecipientValue(addr)
+          if (parsed && !ourAddresses.includes(parsed)) {
+            recipients.add(parsed)
           }
         })
       }
       
       if (email.cc) {
         email.cc.split(',').forEach(addr => {
-          const trimmed = addr.trim()
-          if (!ourAddresses.includes(trimmed)) {
-            recipients.add(trimmed)
+          const parsed = parseRecipientValue(addr)
+          if (parsed && !ourAddresses.includes(parsed)) {
+            recipients.add(parsed)
           }
         })
       }
       
-      setTo(Array.from(recipients).join(', '))
+      setToRecipients(Array.from(recipients))
+      setToInput("")
       setSubject(email.subject?.startsWith("Re:") ? email.subject : `Re: ${email.subject || ""}`)
     } else if (intent === 'forward') {
-      setTo("")
+      setToRecipients([])
+      setToInput("")
       setSubject(email.subject?.startsWith("Fwd:") ? email.subject : `Fwd: ${email.subject || ""}`)
     }
   }, [email, intent])
@@ -173,6 +363,12 @@ export function Composer({
       containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [mode])
+
+  useEffect(() => {
+    return () => {
+      clearRecentTimer()
+    }
+  }, [clearRecentTimer])
 
   // Autosave logic
   const performSave = useCallback(async () => {
@@ -196,7 +392,7 @@ export function Composer({
     const params = {
       id: currentDraftId as any,
       from,
-      to: to || undefined,
+      to: toValue || undefined,
       cc: cc || undefined,
       bcc: bcc || undefined,
       subject,
@@ -227,15 +423,15 @@ export function Composer({
       setAutosaveStatus("error")
       console.error("Autosave failed:", e)
     }
-  }, [from, to, cc, bcc, subject, threadId, currentDraftId, saveDraftMutation, windowId, update, editor])
+  }, [from, toValue, cc, bcc, subject, threadId, currentDraftId, saveDraftMutation, windowId, update, editor])
 
   const handleBlur = useCallback(() => {
     if (!editor) return
     const body = editor.getHTML()
-    const hasContent = (from && intent === "new") || to || cc || bcc || subject || body
+    const hasContent = (intent === "new" && !!from) || !!toValue || !!cc || !!bcc || !!subject || !!body
     if (!hasContent) return
     performSave()
-  }, [from, to, cc, bcc, subject, intent, performSave, editor])
+  }, [from, toValue, cc, bcc, subject, intent, performSave, editor])
 
   const flush = useCallback(async () => {
     if (debounced.current) {
@@ -244,6 +440,273 @@ export function Composer({
     }
     await performSave()
   }, [performSave])
+
+  const addRecipients = useCallback((candidates: string[]): RecipientMutationResult => {
+    const result: RecipientMutationResult = { added: [], invalid: [] }
+    if (!candidates.length) return result
+
+    const cleaned = candidates
+      .map((candidate) => parseRecipientValue(candidate ?? ""))
+      .filter((addr): addr is string => Boolean(addr))
+
+    if (!cleaned.length) {
+      return result
+    }
+
+    const valid: string[] = []
+
+    cleaned.forEach((addr) => {
+      if (!isValidEmail(addr)) {
+        result.invalid.push(addr)
+      } else {
+        valid.push(addr)
+      }
+    })
+
+    if (valid.length) {
+      setToRecipients((prev) => {
+        const existing = new Set(prev.map((entry) => entry.toLowerCase()))
+        const next = [...prev]
+        valid.forEach((addr) => {
+          const key = addr.toLowerCase()
+          if (!existing.has(key)) {
+            existing.add(key)
+            next.push(addr)
+            result.added.push(addr)
+          }
+        })
+        return next
+      })
+    }
+
+    if (result.invalid.length) {
+      toast.error(`Invalid email${result.invalid.length > 1 ? "s" : ""}: ${result.invalid.join(", ")}`)
+    }
+
+    return result
+  }, [])
+
+  const commitTypedRecipient = useCallback(
+    (value?: string): RecipientMutationResult => {
+      const content = (value ?? toInput).trim()
+      if (!content) {
+        return { added: [], invalid: [] }
+      }
+
+      const parsed = parseRecipientList(content)
+      if (!parsed.length) {
+        setToInput("")
+        return { added: [], invalid: [] }
+      }
+
+      const result = addRecipients(parsed)
+      if (result.invalid.length) {
+        setToInput(result.invalid[result.invalid.length - 1] ?? "")
+      } else {
+        setToInput("")
+        setShowRecent(false)
+        clearRecentTimer()
+        scheduleRecentSuggestions()
+        setSuppressSuggestions(false)
+      }
+
+      return result
+    },
+    [addRecipients, clearRecentTimer, scheduleRecentSuggestions, toInput]
+  )
+
+  const focusToInput = useCallback(() => {
+    toInputRef.current?.focus()
+  }, [])
+
+  const handleToChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value
+      setToInput(value)
+      setSuppressSuggestions(false)
+      setShowRecent(false)
+      clearRecentTimer()
+      if (!value.trim()) {
+        scheduleRecentSuggestions()
+      }
+    },
+    [clearRecentTimer, scheduleRecentSuggestions]
+  )
+
+  const handleContactSelect = useCallback(
+    (contact: ContactSuggestion) => {
+      const result = addRecipients([contact.address])
+      if (!result.invalid.length) {
+        setToInput("")
+        scheduleRecentSuggestions()
+      }
+      setShowRecent(false)
+      setSuppressSuggestions(false)
+      clearRecentTimer()
+      focusToInput()
+    },
+    [addRecipients, clearRecentTimer, focusToInput, scheduleRecentSuggestions]
+  )
+
+  const handleToKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      const trimmed = toInput.trim()
+
+      if (event.key === "," || event.key === ";" || event.key === " " || event.key === "Spacebar" || event.key === "Space") {
+        event.preventDefault()
+        commitTypedRecipient()
+        return
+      }
+
+      if (event.key === "Escape") {
+        if (shouldShowDropdown) {
+          event.preventDefault()
+          setSuppressSuggestions(true)
+          setShowRecent(false)
+          clearRecentTimer()
+        }
+        return
+      }
+
+      const defaultSuggestion =
+        (queryReady && filteredContacts[0]) ||
+        (!queryReady && showRecent && recentContacts[0]) ||
+        null
+
+      if (event.key === "Enter") {
+        if (defaultSuggestion) {
+          event.preventDefault()
+          handleContactSelect(defaultSuggestion)
+          return
+        }
+        if (trimmed) {
+          event.preventDefault()
+          commitTypedRecipient()
+        }
+        return
+      }
+
+      if (event.key === "Tab") {
+        if (defaultSuggestion) {
+          event.preventDefault()
+          handleContactSelect(defaultSuggestion)
+          return
+        }
+        if (trimmed) {
+          event.preventDefault()
+          commitTypedRecipient()
+        }
+        return
+      }
+
+      if (event.key === "ArrowDown") {
+        if (!shouldShowDropdown && !queryReady && recentContacts.length) {
+          setShowRecent(true)
+        }
+        if (
+          (queryReady && filteredContacts.length) ||
+          (!queryReady && showRecent && recentContacts.length)
+        ) {
+          event.preventDefault()
+          suggestionsRef.current?.focus()
+        }
+        return
+      }
+
+      if (event.key === "Backspace" && !toInput) {
+        if (!toRecipients.length) return
+        event.preventDefault()
+        const last = toRecipients[toRecipients.length - 1]
+        setToRecipients(toRecipients.slice(0, -1))
+        setToInput(last ?? "")
+      }
+    },
+    [
+      clearRecentTimer,
+      commitTypedRecipient,
+      filteredContacts,
+      handleContactSelect,
+      queryReady,
+      recentContacts,
+      shouldShowDropdown,
+      showRecent,
+      toInput,
+      toRecipients,
+    ]
+  )
+
+  const handleRecipientAreaBlur = useCallback(
+    (nextTarget: EventTarget | null) => {
+      if (toFieldRef.current?.contains(nextTarget as Node)) {
+        return
+      }
+
+      clearRecentTimer()
+      setShowRecent(false)
+      setSuppressSuggestions(false)
+      setIsToFocused(false)
+      commitTypedRecipient()
+      handleBlur()
+    },
+    [clearRecentTimer, commitTypedRecipient, handleBlur]
+  )
+
+  const handleToBlur = useCallback(
+    (event: FocusEvent<HTMLInputElement>) => {
+      handleRecipientAreaBlur(event.relatedTarget)
+    },
+    [handleRecipientAreaBlur]
+  )
+
+  const handleToFocus = useCallback(() => {
+    setIsToFocused(true)
+    setSuppressSuggestions(false)
+    setShowRecent(false)
+    clearRecentTimer()
+    if (!toInput.trim()) {
+      scheduleRecentSuggestions()
+    }
+  }, [clearRecentTimer, scheduleRecentSuggestions, toInput])
+
+  const handleToPaste = useCallback(
+    (event: ClipboardEvent<HTMLInputElement>) => {
+      const text = event.clipboardData.getData("text")
+      if (!text) return
+
+      const parsed = parseRecipientList(text)
+      if (parsed.length <= 1) return
+
+      event.preventDefault()
+      setSuppressSuggestions(false)
+      setShowRecent(false)
+      clearRecentTimer()
+      if (toInput.trim()) {
+        commitTypedRecipient()
+      }
+
+      const result = addRecipients(parsed)
+      if (result.invalid.length) {
+        setToInput(result.invalid[result.invalid.length - 1] ?? "")
+      } else {
+        setToInput("")
+        scheduleRecentSuggestions()
+      }
+    },
+    [addRecipients, clearRecentTimer, commitTypedRecipient, scheduleRecentSuggestions, toInput]
+  )
+
+  const handleRemoveRecipient = useCallback(
+    (index: number) => {
+      setToRecipients((prev) => {
+        if (index < 0 || index >= prev.length) return prev
+        const next = [...prev]
+        next.splice(index, 1)
+        return next
+      })
+      focusToInput()
+    },
+    [focusToInput]
+  )
 
   // Update window title from subject
   const prevTitleRef = useRef<string>("")
@@ -271,7 +734,26 @@ export function Composer({
   }, [windowId, intent, subject, update])
 
   const handleSend = async () => {
-    if (!editor || !from || !to || !subject) return
+    if (!editor || !from || !subject) return
+
+    let recipients = toRecipients
+
+    if (toInput.trim()) {
+      const parsed = parseRecipientList(toInput.trim())
+      const result = addRecipients(parsed)
+      if (result.invalid.length) {
+        setToInput(result.invalid[result.invalid.length - 1] ?? "")
+        return
+      }
+      if (result.added.length) {
+        recipients = [...recipients, ...result.added]
+      }
+      setToInput("")
+    }
+
+    if (!recipients.length) return
+
+    const recipientString = recipients.join(", ")
 
     setIsSending(true)
     try {
@@ -288,7 +770,7 @@ export function Composer({
       
       const sendParams: any = {
         from,
-        to,
+        to: recipientString,
         cc: cc || undefined,
         bcc: bcc || undefined,
         subject,
@@ -372,14 +854,123 @@ export function Composer({
             </div>
           )}
         </div>
-        <Input
-          id="to"
-          type="email"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          onBlur={handleBlur}
-          placeholder="recipient@example.com"
-        />
+        <div ref={toFieldRef} className="relative">
+          <div
+            className={cn(
+              "flex min-h-10 w-full cursor-text flex-wrap items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-within:border-primary focus-within:ring-1 focus-within:ring-ring"
+            )}
+            onClick={focusToInput}
+          >
+            {toRecipients.map((recipient, index) => (
+              <Badge
+                key={`${recipient}-${index}`}
+                variant="secondary"
+                className="flex items-center gap-1 rounded-full px-2 py-1 text-xs"
+              >
+                <span>{recipient}</span>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleRemoveRecipient(index)
+                  }}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-secondary-foreground/10"
+                  aria-label={`Remove ${recipient}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            <input
+              ref={toInputRef}
+              id="to"
+              value={toInput}
+              onChange={handleToChange}
+              onKeyDown={handleToKeyDown}
+              onBlur={handleToBlur}
+              onFocus={handleToFocus}
+              onPaste={handleToPaste}
+              className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              placeholder={toRecipients.length ? "" : "recipient@example.com"}
+              autoComplete="off"
+            />
+          </div>
+          {shouldShowDropdown && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-input bg-popover text-popover-foreground shadow-lg">
+              <Command
+                ref={suggestionsRef}
+                shouldFilter={false}
+                loop
+                tabIndex={-1}
+                onBlur={(event) => handleRecipientAreaBlur(event.relatedTarget)}
+              >
+                <CommandList>
+                  {queryReady && filteredContacts.length > 0 && (
+                    <CommandGroup heading="Suggestions">
+                      {filteredContacts.map((contact) => (
+                        <CommandItem
+                          key={contact.address}
+                          value={contact.address}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onSelect={() => handleContactSelect(contact)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="text-[0.7rem]">
+                                {getContactInitials(contact)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">
+                                {contact.name
+                                  ? highlightMatch(contact.name, toInputQuery)
+                                  : highlightMatch(contact.address, toInputQuery)}
+                              </span>
+                              {contact.name && (
+                                <span className="text-xs text-muted-foreground">
+                                  {highlightMatch(contact.address, toInputQuery)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                  {!queryReady && showRecent && recentContacts.length > 0 && (
+                    <CommandGroup heading="Recent contacts">
+                      {recentContacts.map((contact) => (
+                        <CommandItem
+                          key={`recent-${contact.address}`}
+                          value={contact.address}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onSelect={() => handleContactSelect(contact)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="text-[0.7rem]">
+                                {getContactInitials(contact)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">
+                                {contact.name ?? contact.address}
+                              </span>
+                              {contact.name && (
+                                <span className="text-xs text-muted-foreground">{contact.address}</span>
+                              )}
+                            </div>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                  {showEmptyState && <CommandEmpty>No matches</CommandEmpty>}
+                </CommandList>
+              </Command>
+            </div>
+          )}
+        </div>
       </div>
 
       {(showCc || cc) && intent === 'new' && (
@@ -452,7 +1043,7 @@ export function Composer({
         <Button
           size="sm"
           onClick={handleSend}
-            disabled={!from || !to || !subject || !editor || isSending}
+            disabled={!from || (!toRecipients.length && !toInput.trim()) || !subject || !editor || isSending}
         >
           <Send className="h-4 w-4 mr-2" />
             {isSending ? "Sending..." : "Send"}

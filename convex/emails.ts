@@ -3,6 +3,59 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { Inbound } from "@inboundemail/sdk";
 
+const ADDRESS_DELIMITER_REGEX = /[,;\n]+/;
+
+type ContactAccumulator = {
+  address: string;
+  name?: string;
+  lastSeen: number;
+  count: number;
+};
+
+const parseContactToken = (token: string) => {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  const angleMatch = trimmed.match(/^(?:"?([^"<]+?)"?\s*)?<([^>]+)>$/);
+  if (angleMatch) {
+    const address = angleMatch[2]?.trim();
+    if (!address || !address.includes("@")) return null;
+    const name = angleMatch[1]?.trim();
+    return { address, name };
+  }
+
+  const sanitized = trimmed.replace(/^mailto:/i, "").replace(/[<>]/g, "").trim();
+  if (!sanitized || !sanitized.includes("@")) return null;
+  return { address: sanitized };
+};
+
+const registerContacts = (
+  map: Map<string, ContactAccumulator>,
+  raw: string | undefined,
+  receivedAt: number
+) => {
+  if (!raw) return;
+  const tokens = raw.split(ADDRESS_DELIMITER_REGEX);
+  for (const token of tokens) {
+    const parsed = parseContactToken(token);
+    if (!parsed) continue;
+    const key = parsed.address.toLowerCase();
+    const current = map.get(key);
+    if (current) {
+      current.count += 1;
+      if (parsed.name && !current.name) current.name = parsed.name;
+      if (receivedAt > current.lastSeen) current.lastSeen = receivedAt;
+    } else {
+      map.set(key, {
+        address: parsed.address,
+        name: parsed.name,
+        lastSeen: receivedAt,
+        count: 1,
+      });
+    }
+  }
+};
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -396,5 +449,34 @@ export const sendEmail = action({
     }
 
     return sentEmailId;
+  },
+});
+
+export const contacts = query({
+  args: {},
+  handler: async (ctx) => {
+    const emails = await ctx.db
+      .query("emails")
+      .withIndex("by_receivedAt")
+      .order("desc")
+      .collect();
+
+    const map = new Map<string, ContactAccumulator>();
+
+    for (const email of emails) {
+      const seenAt = email.receivedAt ?? Date.now();
+      registerContacts(map, email.from, seenAt);
+      registerContacts(map, email.to, seenAt);
+      registerContacts(map, email.cc, seenAt);
+      registerContacts(map, email.bcc, seenAt);
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => {
+        if (b.lastSeen !== a.lastSeen) return b.lastSeen - a.lastSeen;
+        if (b.count !== a.count) return b.count - a.count;
+        return a.address.localeCompare(b.address);
+      })
+      .slice(0, 500);
   },
 });
