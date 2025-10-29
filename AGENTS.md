@@ -11,7 +11,7 @@
 - **Frontend**: Next.js 15 + React 19 + TypeScript with App Router
 - **Backend**: Convex (serverless functions + database)
 - **UI**: shadcn/ui components with Radix UI primitives + Tailwind CSS + Sonner for toast notifications + next-themes for dark/light mode
-- **Email**: inbound.new webhook integration for receiving emails, @inboundemail/sdk for sending
+- **Email**: Dual-format webhook integration (supports both Resend and inbound.new) for receiving emails at `/inbound` endpoint, @inboundemail/sdk for sending (migration to Resend in progress)
 - **Database**: Convex with emails table (from, to, cc, bcc, subject, preview, body, read/starred/archived/trashed/draft status, receivedAt, messageId, threadId, category)
 - **Routes**: `/` (inbox), `/archive`, `/starred`, `/sent`, `/compose`, `/drafts`, `/trash`
 - **Analytics**: Vercel Analytics for tracking usage

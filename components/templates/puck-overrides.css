@@ -1,0 +1,108 @@
+/* CSS Variables for brand theming */
+.puck-host,
+.puck-host .Puck {
+  --brand-accent: hsl(var(--primary));
+  --ui-border: hsl(var(--border));
+  --ui-bg: hsl(var(--background));
+  --ui-muted: hsl(var(--muted));
+  --radius: 8px;
+  
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+}
+
+/* Use container height rather than full viewport inside our layout */
+.puck-host .Puck [class*="PuckLayout-inner"] {
+  height: 100% !important;
+}
+
+.puck-host .Puck [class*="header" i],
+.puck-host .Puck [class*="toolbar" i],
+.puck-host .Puck [class*="topbar" i],
+.puck-host .Puck header {
+  display: none !important;
+}
+
+/* Ensure any scaled preview respects top alignment */
+.puck-host .Puck [style*="transform: scale"] {
+  transform-origin: top center !important;
+}
+
+/* Make sure the iframe renders at full size and can scroll vertically */
+.puck-host .Puck iframe { width: 100%; height: 100%; display: block; }
+
+/* Help avoid any fixed preview heights from the default CSS */
+.puck-host .Puck [style*="height: 375px"],
+.puck-host .Puck [style*="height: 400px"] {
+  height: auto !important;
+}
+
+/* De-chrome: reduce borders and backgrounds */
+.puck-host .Puck [class*="Panel"],
+.puck-host .Puck [class*="Card"] {
+  background: var(--ui-bg) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: none !important;
+}
+
+.puck-host .Puck [class*="PanelHeader"],
+.puck-host .Puck [class*="Toolbar"] {
+  background: transparent !important;
+  border-bottom: 1px solid var(--ui-border) !important;
+}
+
+/* Make the preview canvas breathe */
+.puck-host .Puck [class*="Canvas"] {
+  padding: 24px !important;
+  background: var(--ui-muted) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--radius) !important;
+}
+
+/* Compact controls */
+.puck-host .Puck input,
+.puck-host .Puck select,
+.puck-host .Puck [class*="Input"],
+.puck-host .Puck [class*="Select"] {
+  border-radius: calc(var(--radius) - 2px) !important;
+}
+
+/* Brand accent for primary actions */
+.puck-host .Puck [class*="Button--primary"],
+.puck-host .Puck button[data-state="on"] {
+  background: var(--brand-accent) !important;
+  border-color: var(--brand-accent) !important;
+}
+
+/* Compact tabs */
+.puck-host .Puck [class*="TabsList"] {
+  gap: 4px !important;
+}
+
+.puck-host .Puck [class*="TabsTrigger"] {
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  font-size: 0.875rem !important;
+}
+
+/* Compact component cards */
+.puck-host .Puck [class*="ComponentList"] button {
+  padding: 8px !important;
+  border-radius: 8px !important;
+  font-size: 0.875rem !important;
+}
+
+/* Drag-and-drop feedback */
+.puck-host .Puck [data-rfd-draggable-context-id] {
+  transition: all 150ms ease;
+}
+
+.puck-host .Puck [data-rfd-droppable-id][data-is-drag-occurring="true"] {
+  outline: 2px dashed var(--brand-accent) !important;
+  outline-offset: 4px !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--brand-accent) 6%, transparent) !important;
+}
