@@ -1,6 +1,6 @@
-import { action, mutation, query } from "./_generated/server"
+import { action, mutation, query, internalMutation, internalAction } from "./_generated/server"
 import { v } from "convex/values"
-import { api } from "./_generated/api"
+import { api, internal } from "./_generated/api"
 
 export const list = query({
   args: {},
@@ -109,7 +109,7 @@ export const listTrashed = query({
   },
 })
 
-export const upsertFromInbound = mutation({
+export const upsertFromInbound = internalMutation({
   args: {
     payload: v.any(),
   },
@@ -141,7 +141,7 @@ export const upsertFromInbound = mutation({
   },
 })
 
-export const fetchResendBody = action({
+export const fetchResendBody = internalAction({
   args: {
     docId: v.id("emails"),
     emailId: v.string(),
@@ -166,7 +166,7 @@ export const fetchResendBody = action({
         console.error(`Failed to fetch email ${emailId}: ${response.status}`)
         // If it's a 404 and we've tried less than 3 times, retry later
         if (response.status === 404 && attempt < 3) {
-          await ctx.scheduler.runAfter(attempt * 5000, api.emails.fetchResendBody, {
+          await ctx.scheduler.runAfter(attempt * 5000, internal.emails.fetchResendBody, {
             docId,
             emailId,
             attempt: attempt + 1,
@@ -178,7 +178,7 @@ export const fetchResendBody = action({
       const emailData = await response.json()
 
       // Update the email with the full body content
-      await ctx.runMutation(api.emails.updateBody, {
+      await ctx.runMutation(internal.emails.updateBody, {
         docId,
         body: emailData.html || emailData.text || "",
       })
@@ -187,7 +187,7 @@ export const fetchResendBody = action({
       console.error("Error fetching Resend email body:", error)
       // If we haven't exceeded max attempts, retry
       if (attempt < 3) {
-        await ctx.scheduler.runAfter(attempt * 5000, api.emails.fetchResendBody, {
+        await ctx.scheduler.runAfter(attempt * 5000, internal.emails.fetchResendBody, {
           docId,
           emailId,
           attempt: attempt + 1,
@@ -197,7 +197,7 @@ export const fetchResendBody = action({
   },
 })
 
-export const updateBody = mutation({
+export const updateBody = internalMutation({
   args: {
     docId: v.id("emails"),
     body: v.string(),
@@ -286,7 +286,7 @@ export const deleteEmail = mutation({
   },
 })
 
-export const sendEmail: any = action({
+export const sendEmail = action({
   args: {
     from: v.string(),
     to: v.string(),
@@ -298,7 +298,7 @@ export const sendEmail: any = action({
     originalEmailId: v.optional(v.id("emails")),
     draftId: v.optional(v.id("emails")),
   },
-  handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }) => {
+  handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: any }> => {
     // Send email via Resend API
     const resendApiKey = process.env.RESEND_API_KEY
     if (!resendApiKey) {
@@ -398,61 +398,3 @@ export const saveDraft = mutation({
   },
 })
 
-export const sendTest = action({
-  args: {
-    templateId: v.id("templates"),
-    to: v.string(),
-    subjectOverride: v.optional(v.string()),
-  },
-  handler: async (ctx, { templateId, to, subjectOverride }) => {
-    // Get the template
-    const template = await ctx.runQuery(api.templates.get, { id: templateId })
-    if (!template) {
-      throw new Error("Template not found")
-    }
-
-    // Use published content if available, otherwise use current content
-    const content = template.publishedContent || template.content
-    if (!content) {
-      throw new Error("Template has no content")
-    }
-
-    // Render the email
-    const { renderEmail } = await import("../lib/email/render-email.js")
-    const { html, text, subject: templateSubject } = await renderEmail(content)
-    
-    const finalSubject = subjectOverride || templateSubject || template.name || "Test Email"
-
-    // Send via Resend
-    const resendApiKey = process.env.RESEND_API_KEY
-    if (!resendApiKey) {
-      throw new Error("RESEND_API_KEY not configured")
-    }
-
-    // Get the from address from environment or use a default
-    const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject: finalSubject,
-        html,
-        text,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Failed to send email: ${error}`)
-    }
-
-    const result = await response.json()
-    return { success: true, messageId: result.id }
-  },
-})

@@ -1,5 +1,5 @@
 import { httpActionGeneric, httpRouter } from "convex/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const http = httpRouter();
 

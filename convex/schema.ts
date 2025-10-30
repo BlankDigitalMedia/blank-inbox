@@ -20,17 +20,6 @@ export default defineSchema({
     threadId: v.optional(v.string()),
     category: v.optional(v.string()),
   }).index("by_receivedAt", ["receivedAt"]),
-  templates: defineTable({
-    name: v.string(),
-    description: v.optional(v.string()),
-    content: v.any(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    publishedContent: v.optional(v.any()),
-    publishedAt: v.optional(v.number()),
-    publishedHtml: v.optional(v.string()),
-    publishedText: v.optional(v.string()),
-  }).index("by_updatedAt", ["updatedAt"]),
 });
 
 

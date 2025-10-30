@@ -15,7 +15,6 @@ import type {
 } from "convex/server";
 import type * as emails from "../emails.js";
 import type * as http from "../http.js";
-import type * as templates from "../templates.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -28,7 +27,6 @@ import type * as templates from "../templates.js";
 declare const fullApi: ApiFromModules<{
   emails: typeof emails;
   http: typeof http;
-  templates: typeof templates;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

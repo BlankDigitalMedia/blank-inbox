@@ -18,10 +18,10 @@ import {
   SidebarMenuItem,
   SidebarMenuBadge,
 } from "@/components/ui/sidebar"
-import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare, LayoutTemplate } from "lucide-react"
+import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare } from "lucide-react"
 
 interface MailSidebarProps {
-  activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts" | "templates"
+  activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"
   unreadCount?: number
   onClose?: () => void
 }
@@ -94,14 +94,7 @@ export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSideba
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={activeView === "templates"}>
-                  <Link href="/templates">
-                    <LayoutTemplate className="h-4 w-4" />
-                    <span>Templates</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={activeView === "archive"}>
                   <Link href="/archive">
