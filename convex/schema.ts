@@ -26,6 +26,10 @@ export default defineSchema({
     content: v.any(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    publishedContent: v.optional(v.any()),
+    publishedAt: v.optional(v.number()),
+    publishedHtml: v.optional(v.string()),
+    publishedText: v.optional(v.string()),
   }).index("by_updatedAt", ["updatedAt"]),
 });
 

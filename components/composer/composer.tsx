@@ -190,7 +190,7 @@ export function Composer({
   const recentContacts = useMemo(() => {
     if (!contacts) return [] as ContactSuggestion[]
 
-    const filtered = contacts.filter((contact) => {
+    const filtered = contacts.filter((contact: ContactSuggestion) => {
       if (!contact?.address) return false
       return !selectedRecipients.has(contact.address.toLowerCase())
     })
@@ -939,7 +939,7 @@ export function Composer({
                   )}
                   {!queryReady && showRecent && recentContacts.length > 0 && (
                     <CommandGroup heading="Recent contacts">
-                      {recentContacts.map((contact) => (
+                      {recentContacts.map((contact: ContactSuggestion) => (
                         <CommandItem
                           key={`recent-${contact.address}`}
                           value={contact.address}

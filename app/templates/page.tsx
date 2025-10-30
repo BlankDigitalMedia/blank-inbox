@@ -15,9 +15,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TemplateBuilder, defaultTemplateData } from "@/components/templates/template-builder"
-import { Plus, Loader2, Undo2, Redo2, Upload } from "lucide-react"
-import { useMutation, useQuery } from "convex/react"
+import { Plus, Loader2, Undo2, Redo2, Upload, Download, Send } from "lucide-react"
+import { useMutation, useQuery, useAction } from "convex/react"
 import { api } from "@/convex/_generated/api"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { Data } from "@measured/puck"
 import { cn } from "@/lib/utils"
@@ -45,6 +53,9 @@ const cloneDefaultData = (): Data => JSON.parse(JSON.stringify(defaultTemplateDa
 export default function TemplatesPage() {
   const templates = useQuery(api.templates.list) as TemplateRecord[] | undefined
   const upsertTemplate = useMutation(api.templates.upsert)
+  const publishTemplate = useAction(api.templates.publish)
+  const exportHtml = useAction(api.templates.exportHtml)
+  const sendTestEmail = useAction(api.emails.sendTest)
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<Id<"templates"> | null>(null)
   const [nameDraft, setNameDraft] = useState("")
@@ -53,6 +64,10 @@ export default function TemplatesPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [sendTestDialogOpen, setSendTestDialogOpen] = useState(false)
+  const [testEmailAddress, setTestEmailAddress] = useState("")
+  const [isSendingTest, setIsSendingTest] = useState(false)
 
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
   const pendingSave = useRef<SavePayload | null>(null)
@@ -215,9 +230,53 @@ export default function TemplatesPage() {
   }, [descriptionDraft, editorState, nameDraft, scheduleSave])
 
   const handlePublishClick = useCallback(async () => {
+    const templateId = latestTemplateId.current
+    if (!templateId) return
+
     await flushSave()
-    toast.success("Published", { duration: 2000 })
-  }, [flushSave])
+    setIsPublishing(true)
+    
+    try {
+      await publishTemplate({ id: templateId })
+      toast.success("Published successfully", { duration: 2000 })
+    } catch (error) {
+      toast.error(`Failed to publish: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsPublishing(false)
+    }
+  }, [flushSave, publishTemplate])
+
+  const handleExportHtml = useCallback(async () => {
+    const templateId = latestTemplateId.current
+    if (!templateId) return
+
+    try {
+      const result = await exportHtml({ id: templateId })
+      
+      // Copy HTML to clipboard
+      await navigator.clipboard.writeText(result.html)
+      toast.success("HTML copied to clipboard", { duration: 2000 })
+    } catch (error) {
+      toast.error(`Failed to export: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }, [exportHtml])
+
+  const handleSendTest = useCallback(async () => {
+    const templateId = latestTemplateId.current
+    if (!templateId || !testEmailAddress) return
+
+    setIsSendingTest(true)
+    try {
+      await sendTestEmail({ templateId, to: testEmailAddress })
+      toast.success(`Test email sent to ${testEmailAddress}`, { duration: 3000 })
+      setSendTestDialogOpen(false)
+      setTestEmailAddress("")
+    } catch (error) {
+      toast.error(`Failed to send: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsSendingTest(false)
+    }
+  }, [sendTestEmail, testEmailAddress])
 
   // Keyboard shortcuts: Cmd/Ctrl+S to save, Z to undo, Shift+Z to redo
   useEffect(() => {
@@ -353,16 +412,10 @@ export default function TemplatesPage() {
                 </SelectContent>
               </Select>
               <Input
-                className="w-[220px]"
+                className="min-w-[200px] max-w-[360px] w-[24ch]"
                 value={nameDraft}
                 onChange={(e) => handleNameChange(e.target.value)}
                 placeholder="Template name"
-              />
-              <Input
-                className="w-[280px]"
-                value={descriptionDraft}
-                onChange={(e) => handleDescriptionChange(e.target.value)}
-                placeholder="Description"
               />
             </>
           ) : null}
@@ -397,9 +450,17 @@ export default function TemplatesPage() {
                   <Redo2 className="h-4 w-4" />
                 </Button>
                 <Separator orientation="vertical" className="mx-1 h-5" />
-                <Button size="sm" onClick={handlePublishClick} variant="default">
-                  <Upload className="mr-2 h-4 w-4" />
+                <Button size="sm" onClick={handlePublishClick} variant="default" disabled={isPublishing}>
+                  {isPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                   Publish
+                </Button>
+                <Button size="sm" onClick={handleExportHtml} variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Copy HTML
+                </Button>
+                <Button size="sm" onClick={() => setSendTestDialogOpen(true)} variant="outline">
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Test
                 </Button>
                 <Separator orientation="vertical" className="mx-1 h-5" />
               </>
@@ -440,6 +501,39 @@ export default function TemplatesPage() {
           </div>
         </div>
       </SidebarInset>
+
+      <Dialog open={sendTestDialogOpen} onOpenChange={setSendTestDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Test Email</DialogTitle>
+            <DialogDescription>
+              Enter an email address to send a test of this template.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="email"
+              placeholder="test@example.com"
+              value={testEmailAddress}
+              onChange={(e) => setTestEmailAddress(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && testEmailAddress) {
+                  void handleSendTest()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendTestDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendTest} disabled={!testEmailAddress || isSendingTest}>
+              {isSendingTest ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
