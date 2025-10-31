@@ -51,3 +51,11 @@
 - **Naming**: camelCase for variables/functions, PascalCase for components
 - **Error Handling**: Standard try/catch, no custom error boundaries yet
 - **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components
+
+## Documentation (Wave 2 Complete)
+- **README.md**: Comprehensive setup guide with Quick Start for self-hosters
+- **.env.example**: All environment variables documented with clear comments
+- **docs/TESTING.md**: Manual test plan with 10 test scenarios (happy path, negative tests, edge cases)
+- **docs/SECURITY.md**: Security best practices, threat model, hardening checklist
+- **docs/AUTH_CONTRACT.md**: Auth implementation contract from Wave 0/1
+
