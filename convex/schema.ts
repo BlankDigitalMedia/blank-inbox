@@ -15,6 +15,7 @@ export default defineSchema({
     archived: v.optional(v.boolean()),
     trashed: v.optional(v.boolean()),
     draft: v.optional(v.boolean()),
+    sent: v.optional(v.boolean()),
     receivedAt: v.number(),
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),

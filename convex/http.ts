@@ -17,7 +17,7 @@ http.route({
     
     // If this is a Resend webhook with email_id, schedule background fetch for body content
     if (emailId && docId) {
-      await ctx.scheduler.runAfter(0, internal.emails.fetchResendBody, {
+      await ctx.scheduler.runAfter(0, internal.emails.fetchEmailBodyFromResend, {
         docId,
         emailId,
         attempt: 1,

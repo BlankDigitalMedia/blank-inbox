@@ -1,6 +1,11 @@
 import { action, mutation, query, internalMutation, internalAction } from "./_generated/server"
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
+import type { Id } from "./_generated/dataModel"
+
+// Helper to check if field is false or undefined (for backward compatibility)
+const isFalseOrUndef = (q: any, field: string) => 
+  q.or(q.eq(q.field(field), false), q.eq(q.field(field), undefined))
 
 export const list = query({
   args: {},
@@ -9,8 +14,10 @@ export const list = query({
       .query("emails")
       .withIndex("by_receivedAt")
       .order("desc")
-      .filter((q) => q.eq(q.field("trashed"), false))
-      .filter((q) => q.eq(q.field("archived"), false))
+      .filter((q) => isFalseOrUndef(q, "archived"))
+      .filter((q) => isFalseOrUndef(q, "trashed"))
+      .filter((q) => isFalseOrUndef(q, "draft"))
+      .filter((q) => isFalseOrUndef(q, "sent"))
       .collect()
   },
 })
@@ -46,8 +53,7 @@ export const listSent = query({
       .query("emails")
       .withIndex("by_receivedAt")
       .order("desc")
-      .filter((q) => q.eq(q.field("trashed"), false))
-      .filter((q) => q.eq(q.field("archived"), false))
+      .filter((q) => q.eq(q.field("sent"), true))
       .collect()
   },
 })
@@ -60,7 +66,8 @@ export const listStarred = query({
       .withIndex("by_receivedAt")
       .order("desc")
       .filter((q) => q.eq(q.field("starred"), true))
-      .filter((q) => q.eq(q.field("trashed"), false))
+      .filter((q) => isFalseOrUndef(q, "trashed"))
+      .filter((q) => isFalseOrUndef(q, "draft"))
       .collect()
   },
 })
@@ -71,6 +78,8 @@ export const contacts = query({
     // Get all unique email addresses from sent emails
     const sentEmails = await ctx.db
       .query("emails")
+      .filter((q) => q.eq(q.field("sent"), true))
+      .filter((q) => isFalseOrUndef(q, "trashed"))
       .filter((q) => q.neq(q.field("to"), undefined))
       .collect()
 
@@ -130,9 +139,13 @@ export const upsertFromInbound = internalMutation({
       to,
       subject,
       preview,
-      body: "", // Will be populated by fetchResendBody
+      body: "", // Will be populated by fetchEmailBodyFromResend
       read: false,
       starred: false,
+      archived: false,
+      trashed: false,
+      draft: false,
+      sent: false,
       receivedAt,
       messageId,
     })
@@ -141,7 +154,7 @@ export const upsertFromInbound = internalMutation({
   },
 })
 
-export const fetchResendBody = internalAction({
+export const fetchEmailBodyFromResend = internalAction({
   args: {
     docId: v.id("emails"),
     emailId: v.string(),
@@ -164,9 +177,11 @@ export const fetchResendBody = internalAction({
 
       if (!response.ok) {
         console.error(`Failed to fetch email ${emailId}: ${response.status}`)
-        // If it's a 404 and we've tried less than 3 times, retry later
-        if (response.status === 404 && attempt < 3) {
-          await ctx.scheduler.runAfter(attempt * 5000, internal.emails.fetchResendBody, {
+        // Retry on 404, 429, and 5xx errors
+        const shouldRetry = response.status === 404 || response.status === 429 || (response.status >= 500 && response.status < 600)
+        if (shouldRetry && attempt < 3) {
+          const delayMs = Math.min(15000, attempt * 5000)
+          await ctx.scheduler.runAfter(delayMs, internal.emails.fetchEmailBodyFromResend, {
             docId,
             emailId,
             attempt: attempt + 1,
@@ -187,7 +202,8 @@ export const fetchResendBody = internalAction({
       console.error("Error fetching Resend email body:", error)
       // If we haven't exceeded max attempts, retry
       if (attempt < 3) {
-        await ctx.scheduler.runAfter(attempt * 5000, internal.emails.fetchResendBody, {
+        const delayMs = Math.min(15000, attempt * 5000)
+        await ctx.scheduler.runAfter(delayMs, internal.emails.fetchEmailBodyFromResend, {
           docId,
           emailId,
           attempt: attempt + 1,
@@ -241,12 +257,15 @@ export const markRead = mutation({
   },
 })
 
-export const deleteDraft = mutation({
+export const deleteEmail = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
     await ctx.db.delete(id)
   },
 })
+
+// Alias for backward compatibility
+export const deleteDraft = deleteEmail
 
 export const storeSentEmail = mutation({
   args: {
@@ -271,18 +290,15 @@ export const storeSentEmail = mutation({
       body: html,
       read: true,
       starred: false,
+      archived: false,
+      trashed: false,
+      draft: false,
+      sent: true,
       receivedAt: Date.now(),
       messageId,
       threadId: originalEmailId?.toString(),
     })
     return docId
-  },
-})
-
-export const deleteEmail = mutation({
-  args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
-    await ctx.db.delete(id)
   },
 })
 
@@ -298,36 +314,88 @@ export const sendEmail = action({
     originalEmailId: v.optional(v.id("emails")),
     draftId: v.optional(v.id("emails")),
   },
-  handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: any }> => {
-    // Send email via Resend API
+  handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: Id<"emails"> }> => {
     const resendApiKey = process.env.RESEND_API_KEY
-    if (!resendApiKey) {
-      throw new Error("RESEND_API_KEY not configured")
+    const inboundApiKey = process.env.NEXT_INBOUND_API_KEY
+    
+    if (!resendApiKey && !inboundApiKey) {
+      throw new Error("No email provider configured. Set RESEND_API_KEY or NEXT_INBOUND_API_KEY")
     }
 
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        cc: cc ? [cc] : undefined,
-        bcc: bcc ? [bcc] : undefined,
-        subject,
-        html,
-        text,
-      }),
-    })
+    let messageId: string | undefined
+    let sendError: Error | null = null
 
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Failed to send email: ${error}`)
+    // Try Resend first if available
+    if (resendApiKey) {
+      try {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify({
+            from,
+            to: [to],
+            cc: cc ? [cc] : undefined,
+            bcc: bcc ? [bcc] : undefined,
+            subject,
+            html,
+            text,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.text()
+          throw new Error(`Resend API error: ${error}`)
+        }
+
+        const result = await response.json()
+        messageId = result.id
+      } catch (error) {
+        sendError = error as Error
+        console.error("Resend send failed:", error)
+        
+        // If inbound.new is not available, throw the error
+        if (!inboundApiKey) {
+          throw new Error(`Failed to send email via Resend: ${sendError.message}`)
+        }
+      }
     }
 
-    const result = await response.json()
+    // Try inbound.new if Resend failed or wasn't available
+    if (!messageId && inboundApiKey) {
+      try {
+        const { Inbound } = await import("@inboundemail/sdk")
+        const inbound = new Inbound(inboundApiKey)
+
+        const result = await inbound.send({
+          from,
+          to,
+          cc,
+          bcc,
+          subject,
+          html,
+          text,
+        })
+
+        messageId = (result as any).messageId || (result as any).id || `inbound-${Date.now()}`
+      } catch (error) {
+        const inboundError = error as Error
+        console.error("inbound.new send failed:", error)
+        
+        // If both providers failed, throw combined error
+        if (sendError) {
+          throw new Error(`Failed to send email. Resend: ${sendError.message}. inbound.new: ${inboundError.message}`)
+        } else {
+          throw new Error(`Failed to send email via inbound.new: ${inboundError.message}`)
+        }
+      }
+    }
+
+    if (!messageId) {
+      throw new Error("Failed to send email via any provider")
+    }
 
     // Store the sent email record
     const docId = await ctx.runMutation(api.emails.storeSentEmail, {
@@ -338,7 +406,7 @@ export const sendEmail = action({
       subject,
       html,
       text,
-      messageId: result.id,
+      messageId,
       originalEmailId,
     })
 
@@ -347,7 +415,7 @@ export const sendEmail = action({
       await ctx.runMutation(api.emails.deleteEmail, { id: draftId })
     }
 
-    return { success: true, messageId: result.id, docId }
+    return { success: true, messageId, docId }
   },
 })
 
@@ -392,7 +460,10 @@ export const saveDraft = mutation({
       threadId,
       read: true,
       starred: false,
+      archived: false,
+      trashed: false,
       draft: true,
+      sent: false,
       receivedAt: timestamp,
     })
   },

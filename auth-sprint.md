@@ -1,304 +1,241 @@
-# Authentication Implementation Sprint
+# Sprint Plan: Auth Strategy for OSS Single-Tenant Inbox
 
-Implementation plan for Convex Auth with GitHub OAuth single-user authentication.
+## Executive Summary (Decision)
+Use **Convex Auth with the built-in Password provider** as the primary auth mechanism, bootstrapped for a single admin user. This keeps setup simple (no extra services beyond Convex), works entirely within Convex, is secure enough for a single-tenant self-hosted app, and avoids email deliverability friction for Monday launch. Optionally add Magic Link via Resend later for improved UX.
 
-**Estimated Total Effort:** 1-2 hours
-
----
-
-## Epic 1: GitHub OAuth App Setup
-
-### Story 1.1: Create GitHub OAuth Application
-- [ ] Go to GitHub Settings > Developer settings > OAuth Apps
-- [ ] Click "New OAuth App"
-- [ ] Set Application name (e.g., "Blank Inbox")
-- [ ] Set Homepage URL to your app URL
-- [ ] Set Authorization callback URL to `https://your-domain.com/api/auth/callback/github`
-- [ ] Note: For local dev, also add `http://localhost:3000/api/auth/callback/github`
-- [ ] Generate and copy Client ID
-- [ ] Generate and copy Client Secret
-
-**Story Points:** 1
+**Why not Basic HTTP Auth:** It doesn't propagate identity to Convex and cannot protect your Convex cloud endpoints; it's easy to bypass by calling Convex functions directly, offers poor UX, and complicates WebSockets. It's not appropriate as the only protection for a Convex app.
 
 ---
 
-## Epic 2: Convex Auth Configuration
+## Epics and Stories
 
-### Story 2.1: Install Convex Auth Package
-- [ ] Run `npm install @convex-dev/auth`
-- [ ] Verify package added to package.json
+### Epic 1 — Auth Foundation with Convex Auth (S-M)
+**Goal:** Add Convex Auth to the app and enable password-based sign-in on web.
 
-**Story Points:** 1
+- [ ] **Install and initialize Convex Auth** (S)
+  - **Acceptance:**
+    - `@convex-dev/auth` and `@auth/core` are installed
+    - `npx @convex-dev/auth` run successfully initializes files
+    - `convex/schema.ts` includes `authTables` from `@convex-dev/auth/server`
+  - **Estimate:** 0.5–1h
 
-### Story 2.2: Update Convex Schema with Auth Tables
-- [ ] Open `convex/schema.ts`
-- [ ] Import `authTables` from `@convex-dev/auth/server`
-- [ ] Merge `authTables` into schema definition
-- [ ] Keep existing `emails` table and indexes
+- [ ] **Wire up provider in the client (React or Next.js)** (S)
+  - **Acceptance:**
+    - App uses `ConvexAuthProvider` from `@convex-dev/auth/react`
+    - Auth state is available in the app; signed-out state renders a sign-in screen
+  - **Estimate:** 0.5–1h
 
-**Story Points:** 1
+- [ ] **Implement Password provider (no email verification to start)** (S)
+  - **Acceptance:**
+    - `convex/auth.ts` configured with Password provider:
+      ```ts
+      export const { auth, signIn, signOut, store, isAuthenticated } = 
+        convexAuth({ providers: [Password] })
+      ```
+    - Sign-in page contains email and password fields, plus a toggle for sign-in/sign-up
+    - `signIn("password", formData)` triggers sign-in/sign-up flows
+  - **Estimate:** 1h
 
-### Story 2.3: Create Convex Auth Configuration
-- [ ] Create new file `convex/auth.config.ts`
-- [ ] Import GitHub provider from `@convex-dev/auth/providers/GitHub`
-- [ ] Configure GitHub provider with `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
-- [ ] Set `AUTH_SECRET` environment variable reference
-- [ ] Export auth configuration
+- [ ] **Add minimal sign-out UI** (S)
+  - **Acceptance:**
+    - A Sign out button that calls `signOut` exists and returns to the sign-in page
+  - **Estimate:** 0.5h
 
-**Story Points:** 2
-
-### Story 2.4: Create Next.js Auth API Routes
-- [ ] Create directory `app/api/auth/[...convex]/`
-- [ ] Create `route.ts` in that directory
-- [ ] Export `GET` and `POST` from `@convex-dev/auth/nextjs`
-- [ ] Verify routes are accessible at `/api/auth/*`
-
-**Story Points:** 1
-
----
-
-## Epic 3: Server-Side Authorization Guards
-
-### Story 3.1: Create Owner Guard Helper
-- [ ] Create new file `convex/lib/auth.ts`
-- [ ] Import `ConvexError` from `convex/values`
-- [ ] Implement `requireOwner(ctx)` function
-- [ ] Check `ctx.auth.getUserIdentity()` is not null
-- [ ] Compare identity email against `process.env.OWNER_EMAIL`
-- [ ] Optionally support `process.env.OWNER_SUB` for subject-based auth
-- [ ] Throw `ConvexError` if not authenticated or not owner
-- [ ] Return identity if authorized
-
-**Story Points:** 2
-
-### Story 3.2: Add Auth Guard to Email Queries
-- [ ] Open `convex/emails.ts`
-- [ ] Import `requireOwner` from `./lib/auth`
-- [ ] Add `await requireOwner(ctx)` to `list` query
-- [ ] Add `await requireOwner(ctx)` to `unreadCount` query
-- [ ] Add `await requireOwner(ctx)` to `listArchived` query
-- [ ] Add `await requireOwner(ctx)` to `listStarred` query
-- [ ] Add `await requireOwner(ctx)` to `listSent` query
-- [ ] Add `await requireOwner(ctx)` to `listTrashed` query
-- [ ] Add `await requireOwner(ctx)` to `listDrafts` query
-- [ ] Add `await requireOwner(ctx)` to `get` query
-- [ ] Add `await requireOwner(ctx)` to `contacts` query
-
-**Story Points:** 2
-
-### Story 3.3: Add Auth Guard to Email Mutations
-- [ ] Add `await requireOwner(ctx)` to `toggleStar` mutation
-- [ ] Add `await requireOwner(ctx)` to `markRead` mutation
-- [ ] Add `await requireOwner(ctx)` to `toggleArchive` mutation
-- [ ] Add `await requireOwner(ctx)` to `toggleTrash` mutation
-- [ ] Add `await requireOwner(ctx)` to `saveDraft` mutation
-- [ ] Add `await requireOwner(ctx)` to `deleteDraft` mutation
-- [ ] Add `await requireOwner(ctx)` to `storeSentEmail` mutation
-
-**Story Points:** 1
-
-### Story 3.4: Add Auth Guard to Email Actions
-- [ ] Add `await requireOwner(ctx)` to `sendEmail` action
-- [ ] Verify action still works with auth check
-
-**Story Points:** 1
-
-### Story 3.5: Create Viewer Query for Client-Side Auth State
-- [ ] Create new file `convex/auth.ts`
-- [ ] Import query from `./_generated/server`
-- [ ] Implement `viewer` query with no args
-- [ ] Get identity with `ctx.auth.getUserIdentity()`
-- [ ] Return null if no identity
-- [ ] Check if email/subject matches `OWNER_EMAIL` or `OWNER_SUB`
-- [ ] Return `{ email, name }` if owner, null otherwise
-
-**Story Points:** 2
+**Notes:**
+- Defer password reset and email verification to a later enhancement to avoid introducing Resend dependency for auth at launch
 
 ---
 
-## Epic 4: Webhook Security
+### Epic 2 — Single-Tenant Constraints and Bootstrap (S-M)
+**Goal:** Ensure only one admin exists and sign-ups are closed after first setup.
 
-### Story 4.1: Add Webhook Secret Validation
-- [ ] Open `convex/http.ts` (or create if doesn't exist)
-- [ ] Add check for `x-inbound-secret` header in webhook handler
-- [ ] Compare against `process.env.INBOUND_WEBHOOK_SECRET`
-- [ ] Throw error if secret doesn't match
-- [ ] Ensure `upsertFromInbound` remains an `internalMutation`
-- [ ] Do NOT add `requireOwner` to webhook mutations
+- [ ] **First-run bootstrap (create admin)** (S)
+  - **Acceptance:**
+    - If users table has 0 users, sign-up is allowed; else, sign-up is disabled
+    - After creating the first account, app switches to "sign-in only"
+  - **Estimate:** 1h
 
-**Story Points:** 2
+- [ ] **Optional: Lock to allowed admin email via env** (S)
+  - **Acceptance:**
+    - If `ADMIN_EMAIL` env var is set, sign-up only allowed for that email
+    - Attempting to sign up with a different email returns a clear error
+  - **Estimate:** 0.5–1h
 
----
-
-## Epic 5: Frontend Authentication UI
-
-### Story 5.1: Create Login Page
-- [ ] Create new file `app/login/page.tsx`
-- [ ] Add page title "Sign in to Blank Inbox"
-- [ ] Add link/button to `/api/auth/signin/github`
-- [ ] Style with existing Tailwind/shadcn components
-- [ ] Add GitHub icon from lucide-react
-
-**Story Points:** 1
-
-### Story 5.2: Create Auth Gate Component
-- [ ] Create new file `components/auth/auth-gate.tsx`
-- [ ] Mark as client component with `"use client"`
-- [ ] Import and use `useQuery` from `convex/react`
-- [ ] Query `api.auth.viewer`
-- [ ] Show loading state while query is pending
-- [ ] If viewer is null, show "Not authenticated" and link to `/login`
-- [ ] If viewer exists, render children
-
-**Story Points:** 2
-
-### Story 5.3: Wrap Application with Auth Gate
-- [ ] Open `app/layout.tsx` or main app entry point
-- [ ] Import `AuthGate` component
-- [ ] Wrap main application content with `<AuthGate>`
-- [ ] Ensure ConvexProvider is outside AuthGate
-- [ ] Test that unauthenticated users see login prompt
-
-**Story Points:** 1
-
-### Story 5.4: Add Sign Out Button
-- [ ] Open sidebar component (e.g., `components/mail-sidebar.tsx`)
-- [ ] Add "Sign out" button or menu item
-- [ ] Link to `/api/auth/signout`
-- [ ] Style consistently with existing UI
-- [ ] Test sign out flow
-
-**Story Points:** 1
+- [ ] **Authorization guard in Convex functions** (S)
+  - **Acceptance:**
+    - All queries/mutations/actions that access inbox data call `getAuthUserId(ctx)` or `isAuthenticated` and return unauthorized if absent
+    - Add a simple shared helper to enforce auth at the top of functions
+  - **Estimate:** 1–2h
 
 ---
 
-## Epic 6: Environment Configuration & Deployment
+### Epic 3 — Protect Routes and Server Calls (Next.js) (S)
+**Goal:** Prevent unauthenticated access to app routes.
 
-### Story 6.1: Create Local Environment Variables
-- [ ] Create `.env.local` file (if not exists)
-- [ ] Add `GITHUB_CLIENT_ID=your_client_id`
-- [ ] Add `GITHUB_CLIENT_SECRET=your_client_secret`
-- [ ] Add `AUTH_SECRET=` with random 32+ character string
-- [ ] Add `OWNER_EMAIL=your_github_email@example.com`
-- [ ] Add `INBOUND_WEBHOOK_SECRET=` with random string
-- [ ] Ensure `.env.local` is in `.gitignore`
+- [ ] **Add convexAuthNextjsMiddleware for route protection** (S)
+  - **Acceptance:**
+    - `middleware.ts` redirects unauthenticated users from protected routes (e.g., `/`, `/inbox`, `/sent`) to `/signin`
+    - Signed-in users are redirected away from `/signin` to the app
+  - **Estimate:** 1h
 
-**Story Points:** 1
-
-### Story 6.2: Configure Convex Environment Variables
-- [ ] Run `npx convex env set GITHUB_CLIENT_ID your_value`
-- [ ] Run `npx convex env set GITHUB_CLIENT_SECRET your_value`
-- [ ] Run `npx convex env set AUTH_SECRET your_value`
-- [ ] Run `npx convex env set OWNER_EMAIL your_value`
-- [ ] Run `npx convex env set INBOUND_WEBHOOK_SECRET your_value`
-- [ ] Verify with `npx convex env list`
-
-**Story Points:** 1
-
-### Story 6.3: Configure Vercel Environment Variables
-- [ ] Go to Vercel project settings > Environment Variables
-- [ ] Add `GITHUB_CLIENT_ID` (production value)
-- [ ] Add `GITHUB_CLIENT_SECRET` (production value)
-- [ ] Add `AUTH_SECRET` (production value)
-- [ ] Add `OWNER_EMAIL` (your email)
-- [ ] Add `INBOUND_WEBHOOK_SECRET` (production value)
-- [ ] Add `NEXT_INBOUND_API_KEY` (if not already set)
-- [ ] Set all variables for Production, Preview, and Development
-
-**Story Points:** 1
-
-### Story 6.4: Update GitHub OAuth Callback URLs
-- [ ] Go to GitHub OAuth App settings
-- [ ] Add production callback URL: `https://your-vercel-domain.com/api/auth/callback/github`
-- [ ] Keep localhost URL for development
-- [ ] Save changes
-
-**Story Points:** 1
+- [ ] **Use convexAuthNextjsToken in server actions/handlers** (S)
+  - **Acceptance:**
+    - Server components/route handlers use `convexAuthNextjsToken` for authenticated `fetchQuery`/`fetchMutation`
+    - No side effects on GET routes (CSRF guard)
+  - **Estimate:** 1h
 
 ---
 
-## Epic 7: Testing & Verification
+### Epic 4 — QA, Security, and Docs (S)
+**Goal:** Validate end-to-end flows and document setup.
 
-### Story 7.1: Test Local Authentication Flow
-- [ ] Run `npm run dev`
-- [ ] Navigate to app without auth
-- [ ] Verify redirect/prompt to login page
-- [ ] Click "Sign in with GitHub"
-- [ ] Complete GitHub OAuth flow
-- [ ] Verify successful authentication and app access
-- [ ] Test sign out functionality
+- [ ] **E2E happy path** (S)
+  - **Acceptance:**
+    - Create admin on first run → sign out → sign in → access inbox → sign out
+  - **Estimate:** 0.5–1h
 
-**Story Points:** 2
+- [ ] **Negative tests and hardening** (S)
+  - **Acceptance:**
+    - Unauthenticated access to Convex functions returns unauthorized
+    - Sign-ups blocked after first user
+    - CSRF guidance applied (no side effects on GET if Next.js)
+  - **Estimate:** 1h
 
-### Story 7.2: Test Authorization Guards
-- [ ] Verify all email list views load (inbox, archive, starred, etc.)
-- [ ] Test email detail view loads
-- [ ] Test starring/unstarring emails
-- [ ] Test archiving/unarchiving
-- [ ] Test composing and sending email
-- [ ] Test draft save/delete
-- [ ] Verify no console errors related to auth
-
-**Story Points:** 2
-
-### Story 7.3: Test Webhook Security
-- [ ] Send test webhook to `/api/inbound` or webhook endpoint
-- [ ] Verify it fails without `x-inbound-secret` header
-- [ ] Add correct secret header
-- [ ] Verify webhook processes successfully
-- [ ] Verify email appears in inbox
-
-**Story Points:** 1
-
-### Story 7.4: Test Production Deployment
-- [ ] Deploy to Vercel with `vercel --prod` or push to main
-- [ ] Navigate to production URL
-- [ ] Test full authentication flow on production
-- [ ] Verify GitHub OAuth callback works with production URL
-- [ ] Test email operations work in production
-- [ ] Monitor Vercel and Convex logs for errors
-
-**Story Points:** 2
-
-### Story 7.5: Security Verification
-- [ ] Open app in incognito/private window
-- [ ] Verify unauthenticated access is blocked
-- [ ] Try accessing with different GitHub account (if available)
-- [ ] Verify non-owner account is rejected
-- [ ] Confirm only owner email can access data
-
-**Story Points:** 1
+- [ ] **README/docs for self-hosters** (S)
+  - **Acceptance:**
+    - Clear steps: set Convex URL, set optional `ADMIN_EMAIL`, run dev, create admin, sign in
+    - No paid services required; note optional Resend for future magic links
+  - **Estimate:** 1h
 
 ---
 
-## Epic 8: Documentation
+### Epic 5 — Optional Enhancements (Post-Launch) (M-L)
+**Goal:** Improve UX with email-based flows using Resend and add reset.
 
-### Story 8.1: Update AGENTS.md
-- [ ] Add authentication section to AGENTS.md
-- [ ] Document that app uses Convex Auth with GitHub OAuth
-- [ ] List required environment variables
-- [ ] Note that all Convex functions are owner-protected
-- [ ] Document webhook security approach
+- [ ] **Magic Link via Resend** (M)
+  - **Acceptance:**
+    - Resend provider configured; `AUTH_RESEND_KEY` set in Convex
+    - Sign-in page can send magic link; clicking link signs user in
+    - Interstitial page pattern used if needed to mitigate session fixation (per docs)
+  - **Estimate:** 2–3h
 
-**Story Points:** 1
+- [ ] **Password reset via OTP with Resend** (M)
+  - **Acceptance:**
+    - Reset flow sends OTP; user can set a new password with code
+    - Library's automatic rate limiting for failed attempts is effective
+  - **Estimate:** 2–3h
 
-### Story 8.2: Create Authentication Troubleshooting Guide
-- [ ] Document common issues (callback URL mismatch, env vars not set)
-- [ ] Add instructions for checking Convex logs
-- [ ] Document how to verify owner email matches GitHub
-- [ ] Add steps to regenerate secrets if needed
-
-**Story Points:** 1
+- [ ] **Email verification via OTP with Resend** (M)
+  - **Acceptance:**
+    - On sign-up, user verifies email with code if enabled
+  - **Estimate:** 2–3h
 
 ---
 
-## Acceptance Criteria
+## Acceptance Criteria (Summary)
+- ✅ Password-based sign-in works end-to-end using Convex Auth
+- ✅ First-run admin bootstrap works; sign-ups blocked after initial user, or restricted to `ADMIN_EMAIL` if set
+- ✅ All Convex functions that access data enforce `isAuthenticated`/`getAuthUserId`
+- ✅ Protected routes/pages redirect when signed-out
+- ✅ No extra paid services required to launch; Resend optional and off by default for auth
+- ✅ Clear, concise setup docs for self-hosters
 
-- [ ] Only authenticated owner can access any part of the application
-- [ ] Unauthenticated users are prompted to log in
-- [ ] GitHub OAuth flow completes successfully
-- [ ] All email operations work for authenticated owner
-- [ ] Webhooks still process emails with correct secret
-- [ ] Application works on Vercel production
-- [ ] No security warnings or errors in console
-- [ ] Sign out functionality works correctly
+---
+
+## Time Estimates
+- **Epic 1:** S-M (3–5h)
+- **Epic 2:** S-M (2–3h)
+- **Epic 3:** S (2–3h Next.js)
+- **Epic 4:** S (2–3h)
+- **Epic 5** (optional): M-L (6–9h total, post-launch)
+
+**Overall (without optional enhancements):** ~1 day (8-14h), comfortably within a Monday launch window.
+
+---
+
+## Dependencies
+- **Convex** (existing): Convex URL
+- **NPM packages:**
+  - `@convex-dev/auth`
+  - `@auth/core@0.37.0`
+- **Environment variables:**
+  - Optional `ADMIN_EMAIL` (restrict first sign-up)
+  - If adding email flows later: `AUTH_RESEND_KEY`
+- **No Vercel Pro or other paid services required**
+
+---
+
+## Research Findings: Convex Auth
+
+**What it is:**
+- First-party library that implements auth inside your Convex backend; no separate auth service required. Works for React SPA, React Native, and has Next.js support under active development.
+  - Docs: [Convex Authentication](https://docs.convex.dev/auth/convex-auth) and [Convex Auth overview](https://labs.convex.dev/auth)
+  - Beta status noted; Next.js server/middleware docs available
+
+**Supported methods:**
+- Magic Links and OTPs (email) via Auth.js providers like Resend
+- OAuth (GitHub/Google/Apple) via Auth.js provider configuration
+- Passwords (with optional email verification and password reset via OTP/email)
+  - Password provider examples and flows are documented
+
+**Setup summary:**
+- Install `@convex-dev/auth` and `@auth/core`; run `npx @convex-dev/auth`; add `authTables` to schema; wrap app with `ConvexAuthProvider`
+  - [Setup docs](https://labs.convex.dev/auth/setup)
+- For email-based flows, configure Resend (or other Auth.js providers) as providers in `convex/auth.ts` and set `AUTH_RESEND_KEY`
+  - [Magic Links docs](https://labs.convex.dev/auth/config/email)
+- Next.js: Use `convexAuthNextjsMiddleware` to protect routes; use `convexAuthNextjsToken` in server actions/handlers; avoid side-effects in GET to prevent CSRF
+  - [Next.js authz docs](https://labs.convex.dev/auth/authz/nextjs)
+
+**Security notes:**
+- Always gate Convex functions with `isAuthenticated`/`getAuthUserId`
+- For magic links, consider interstitial confirmation to mitigate session fixation
+- CSRF considerations when using cookies in Next.js; no side effects on GET
+
+**Suitability for single-tenant self-hosted:**
+- ✅ Very suitable: runs entirely in Convex, no separate infra, minimal setup
+- ✅ Password provider avoids email deliverability friction and Resend dependency at launch; magic link/OTP can be added later as optional UX improvement
+- ✅ You cannot wrap Convex Cloud endpoints behind Basic Auth, so Convex-integrated auth is the right primitive for secure data access
+
+**Key links:**
+- Convex Auth docs: https://docs.convex.dev/auth/convex-auth and https://labs.convex.dev/auth
+- Setup: https://labs.convex.dev/auth/setup
+- Magic Links (Resend): https://labs.convex.dev/auth/config/email
+- Passwords: https://labs.convex.dev/auth/config/passwords
+- Next.js server-side auth: https://labs.convex.dev/auth/authz/nextjs
+
+---
+
+## Comparison: Convex Auth vs Basic HTTP Auth
+
+| Aspect | Convex Auth | Basic HTTP Auth |
+|--------|-------------|-----------------|
+| **Setup friction** | Moderate but clear (npm installs + provider wiring) | Minimal for pages, but doesn't protect Convex endpoints |
+| **Security** | Real user identity in Convex; enforce authorization in every function | Browser-level only; Convex functions remain publicly callable |
+| **Portability** | Runs on Convex Cloud; no external auth service | Tied to hosting/proxy; cannot protect Convex Cloud |
+| **Implementation time** | S-M for password flow; M for email flows | S to add middleware, but leaves major security gaps |
+| **User experience** | Standard app login screen; extensible | Browser modal prompt; poor UX; no session management |
+
+**Decision:** Convex Auth wins decisively for our Convex-based inbox. Basic HTTP Auth is not acceptable as the sole mechanism.
+
+---
+
+## Risks and Guardrails
+- **Convex Auth is beta:** If you hit blocking issues, fallback to password-only SPA flow (no Next.js middleware) to reduce moving parts
+- **Next.js cookie/CSRF:** Do not perform side effects in GET server components/handlers; restrict mutations to POST/PUT with `convexAuthNextjsToken`
+- **Bootstrap leakage:** Ensure sign-up is disabled after first admin is created; optionally enforce `ADMIN_EMAIL`
+- **Email deliverability** (if enabling magic links/reset later): domain verification may delay onboarding; keep password flow as default
+
+---
+
+## When to Consider the Advanced Path
+- Multi-user or team accounts, SSO, role-based access, passkeys/2FA needs
+- You need enterprise features or compliance: consider WorkOS AuthKit or a mature third-party like Auth0/Clerk
+- You need advanced email verification, rate-limiting policies, or password strength enforcement beyond simple rules
+
+---
+
+## Optional Advanced Path (Outline)
+- Add Magic Links with Resend and OTP password reset
+- Enforce email verification and stronger password validation (zxcvbn, HIBP)
+- Introduce role field in users schema and gate routes/features accordingly
+- Evaluate OAuth providers for social sign-in (GitHub/Google/Apple) using Auth.js provider configs
