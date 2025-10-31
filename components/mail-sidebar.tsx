@@ -1,11 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useCompose } from "@/app/providers/compose-provider"
+import { useAuthActions } from "@convex-dev/auth/react"
 import {
   Sidebar,
   SidebarContent,
@@ -17,8 +19,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuBadge,
+  SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare } from "lucide-react"
+import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare, LogOut } from "lucide-react"
 
 interface MailSidebarProps {
   activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"
@@ -28,6 +31,13 @@ interface MailSidebarProps {
 
 export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSidebarProps) {
   const { openNew } = useCompose()
+  const { signOut } = useAuthActions()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push("/signin")
+  }
   
   return (
     <Sidebar variant="inset" className="h-dvh">
@@ -115,6 +125,13 @@ export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSideba
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter>
+        <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start gap-2" size="sm">
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   )
 }

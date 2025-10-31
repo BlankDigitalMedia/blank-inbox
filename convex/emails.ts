@@ -2,6 +2,7 @@ import { action, mutation, query, internalMutation, internalAction } from "./_ge
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
+import { requireUserId } from "./lib/auth"
 
 // Helper to check if field is false or undefined (for backward compatibility)
 const isFalseOrUndef = (q: any, field: string) => 
@@ -10,6 +11,7 @@ const isFalseOrUndef = (q: any, field: string) =>
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -25,6 +27,7 @@ export const list = query({
 export const listDrafts = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -37,6 +40,7 @@ export const listDrafts = query({
 export const listArchived = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -49,6 +53,7 @@ export const listArchived = query({
 export const listSent = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -61,6 +66,7 @@ export const listSent = query({
 export const listStarred = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -75,6 +81,7 @@ export const listStarred = query({
 export const contacts = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     // Get all unique email addresses from sent emails
     const sentEmails = await ctx.db
       .query("emails")
@@ -109,6 +116,7 @@ export const contacts = query({
 export const listTrashed = query({
   args: {},
   handler: async (ctx) => {
+    requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -226,6 +234,7 @@ export const updateBody = internalMutation({
 export const toggleStar = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
+    requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { starred: !email.starred })
@@ -235,6 +244,7 @@ export const toggleStar = mutation({
 export const toggleArchive = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
+    requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { archived: !email.archived })
@@ -244,6 +254,7 @@ export const toggleArchive = mutation({
 export const toggleTrash = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
+    requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { trashed: !email.trashed })
@@ -253,6 +264,7 @@ export const toggleTrash = mutation({
 export const markRead = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
+    requireUserId(ctx);
     await ctx.db.patch(id, { read: true })
   },
 })
@@ -260,6 +272,7 @@ export const markRead = mutation({
 export const deleteEmail = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
+    requireUserId(ctx);
     await ctx.db.delete(id)
   },
 })
@@ -280,6 +293,7 @@ export const storeSentEmail = mutation({
     originalEmailId: v.optional(v.id("emails")),
   },
   handler: async (ctx, { from, to, cc, bcc, subject, html, text, messageId, originalEmailId }) => {
+    requireUserId(ctx);
     const docId = await ctx.db.insert("emails", {
       from,
       to,
@@ -315,6 +329,7 @@ export const sendEmail = action({
     draftId: v.optional(v.id("emails")),
   },
   handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: Id<"emails"> }> => {
+    requireUserId(ctx);
     const resendApiKey = process.env.RESEND_API_KEY
     const inboundApiKey = process.env.NEXT_INBOUND_API_KEY
     
@@ -431,6 +446,7 @@ export const saveDraft = mutation({
     threadId: v.optional(v.string()),
   },
   handler: async (ctx, { id, from, to, cc, bcc, subject, body, threadId }) => {
+    requireUserId(ctx);
     const timestamp = Date.now()
     const preview = body.length > 100 ? body.substring(0, 100) + "..." : body
 
