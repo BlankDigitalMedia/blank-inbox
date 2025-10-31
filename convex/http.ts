@@ -1,7 +1,10 @@
 import { httpActionGeneric, httpRouter } from "convex/server";
 import { api, internal } from "./_generated/api";
+import { auth } from "./auth";
 
 const http = httpRouter();
+
+auth.addHttpRoutes(http);
 
 http.route({
   path: "/inbound",
