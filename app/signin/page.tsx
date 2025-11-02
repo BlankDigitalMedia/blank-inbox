@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, FormEvent } from "react"
+import { useState, FormEvent, useEffect } from "react"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery } from "convex/react"
+import { api } from "@/convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,21 +19,48 @@ export default function SignInPage() {
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  
+  // Check if signup is allowed (only if no users exist)
+  const userCount = useQuery(api.users.count) ?? 0
+  const signupAllowed = userCount === 0
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
+    // Check signup restrictions
+    if (flow === "signUp") {
+      if (!signupAllowed) {
+        setError("Signup is disabled. This instance is limited to a single user.")
+        setLoading(false)
+        return
+      }
+      
+      // Check ADMIN_EMAIL restriction if set
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
+      if (adminEmail && email !== adminEmail) {
+        setError(`Signup is restricted to ${adminEmail}`)
+        setLoading(false)
+        return
+      }
+    }
+
     try {
       await signIn("password", { email, password, flow })
-      router.push("/")
+      router.replace("/")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed. Please try again.")
-    } finally {
       setLoading(false)
     }
   }
+  
+  // Auto-switch to signIn if signup is not allowed
+  useEffect(() => {
+    if (!signupAllowed && flow === "signUp") {
+      setFlow("signIn")
+    }
+  }, [signupAllowed, flow])
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-4">
@@ -87,38 +116,44 @@ export default function SignInPage() {
           </Button>
         </form>
 
-        <div className="relative">
-          <Separator />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
-            OR
-          </span>
-        </div>
+        {signupAllowed && (
+          <>
+            <div className="relative">
+              <Separator />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
+                OR
+              </span>
+            </div>
+          </>
+        )}
 
-        <div className="text-center text-sm">
-          {flow === "signIn" ? (
-            <span>
-              Don&apos;t have an account?{" "}
-              <button
-                type="button"
-                onClick={() => setFlow("signUp")}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign up
-              </button>
-            </span>
-          ) : (
-            <span>
-              Already have an account?{" "}
-              <button
-                type="button"
-                onClick={() => setFlow("signIn")}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign in
-              </button>
-            </span>
-          )}
-        </div>
+        {signupAllowed && (
+          <div className="text-center text-sm">
+            {flow === "signIn" ? (
+              <span>
+                Don&apos;t have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => setFlow("signUp")}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign up
+                </button>
+              </span>
+            ) : (
+              <span>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => setFlow("signIn")}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign in
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

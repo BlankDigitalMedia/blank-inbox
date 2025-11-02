@@ -24,7 +24,7 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   if (isPublicPage(request) && (await convexAuth.isAuthenticated())) {
     return nextjsMiddlewareRedirect(request, "/");
   }
-});
+}, { cookieConfig: { maxAge: 60 * 60 * 24 * 30 } });
 
 export const config = {
   matcher: ["/((?!_next|favicon.ico|robots.txt|.*\\..*).*)"],

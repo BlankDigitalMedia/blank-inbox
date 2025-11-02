@@ -7,17 +7,18 @@ import { ThemeProvider } from 'next-themes'
 import { Toaster } from '@/components/ui/sonner'
 import { ComposeProvider } from '@/app/providers/compose-provider'
 import { ComposeDock } from '@/components/composer/compose-dock'
-import { Geist, Geist_Mono, Geist as V0_Font_Geist, Geist_Mono as V0_Font_Geist_Mono, Source_Serif_4 as V0_Font_Source_Serif_4 } from 'next/font/google'
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
+import { Geist, Geist_Mono, Geist as BlankInbox_Font_Geist, Geist_Mono as BlankInbox_Font_Geist_Mono, Source_Serif_4 as BlankInbox_Font_Source_Serif_4 } from 'next/font/google'
 
 // Initialize fonts
-const geist = V0_Font_Geist({ subsets: ['latin'], weight: ["100","200","300","400","500","600","700","800","900"] })
-const geistMono = V0_Font_Geist_Mono({ subsets: ['latin'], weight: ["100","200","300","400","500","600","700","800","900"] })
-const sourceSerif_4 = V0_Font_Source_Serif_4({ subsets: ['latin'], weight: ["200","300","400","500","600","700","800","900"] })
+const geist = BlankInbox_Font_Geist({ subsets: ['latin'], weight: ["100","200","300","400","500","600","700","800","900"] })
+const geistMono = BlankInbox_Font_Geist_Mono({ subsets: ['latin'], weight: ["100","200","300","400","500","600","700","800","900"] })
+const sourceSerif_4 = BlankInbox_Font_Source_Serif_4({ subsets: ['latin'], weight: ["200","300","400","500","600","700","800","900"] })
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'Blank Inbox',
+  description: 'Created with blank-inbox',
+  generator: 'blank-inbox',
 }
 
 export default function RootLayout({
@@ -28,21 +29,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased h-dvh overflow-hidden`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <ConvexClientProvider>
-            <ComposeProvider>
-              {children}
-              <ComposeDock />
-              <Toaster />
-            </ComposeProvider>
-          </ConvexClientProvider>
-        </ThemeProvider>
-        <Analytics />
+        <ConvexAuthNextjsServerProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ConvexClientProvider>
+              <ComposeProvider>
+                {children}
+                <ComposeDock />
+                <Toaster />
+              </ComposeProvider>
+            </ConvexClientProvider>
+          </ThemeProvider>
+          <Analytics />
+        </ConvexAuthNextjsServerProvider>
       </body>
     </html>
   )

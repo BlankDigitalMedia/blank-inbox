@@ -22,6 +22,7 @@ Blank Inbox uses **password-based authentication** via `@convex-dev/auth`:
 
 - Passwords are hashed using industry-standard bcrypt
 - Session tokens are stored in HTTP-only cookies
+- Session cookies persist for **30 days** (configurable via middleware)
 - No third-party OAuth providers (simplifies deployment)
 - Single-tenant design: Only **one user** per instance
 
