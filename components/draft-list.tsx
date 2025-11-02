@@ -2,8 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Star, Archive, Trash2, MoreHorizontal } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Trash2, MoreHorizontal } from "lucide-react"
 import { SharedEmailListItem } from "@/components/shared/email-list-item"
 import { useCompose } from "@/app/providers/compose-provider"
 import type { Email } from "@/components/email-page"

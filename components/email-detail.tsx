@@ -6,8 +6,6 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, Archive, Trash2, Reply, ReplyAll, Forward, MoreHorizontal } from "lucide-react"
 import { cn, renderEmailBody } from "@/lib/utils"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
 import { useCompose } from "@/app/providers/compose-provider"
 import type { Email } from "@/components/email-page"
 
@@ -32,7 +30,6 @@ export function EmailDetail({
   onToggleArchive,
   onToggleTrash
 }: EmailDetailProps) {
-  const router = useRouter()
   const { openReply, openReplyAll, openForward } = useCompose()
 
   if (!email) {
@@ -93,37 +90,37 @@ export function EmailDetail({
 
           {/* Actions */}
           <ButtonGroup className="mt-8 bg-background/10">
-            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleStar(email.id)}>
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleStar(email.id)} aria-label={email.starred ? "Unstar email" : "Star email"}>
               <Star className={cn("h-4 w-4", email.starred && "fill-yellow-500 text-yellow-500")} />
             </Button>
             {onToggleArchive && (
-            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleArchive(email.id)}>
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleArchive(email.id)} aria-label={email.archived ? "Unarchive email" : "Archive email"}>
               <Archive className="h-4 w-4" />
             </Button>
             )}
             {onToggleTrash && (
-            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleTrash(email.id)}>
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" onClick={() => onToggleTrash(email.id)} aria-label={email.trashed ? "Restore from trash" : "Move to trash"}>
               <Trash2 className="h-4 w-4" />
             </Button>
             )}
-            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500">
+            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent hover:text-yellow-500" aria-label="More actions">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
             <ButtonGroupSeparator />
             {showReply && (
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReply(email)}>
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReply(email)} aria-label="Reply">
               <Reply className="h-4 w-4" />
               Reply
             </Button>
             )}
             {showReplyAll && (
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReplyAll(email)}>
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openReplyAll(email)} aria-label="Reply all">
               <ReplyAll className="h-4 w-4" />
               Reply All
             </Button>
             )}
             {showForward && (
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openForward(email)}>
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent hover:text-yellow-500" onClick={() => openForward(email)} aria-label="Forward">
               <Forward className="h-4 w-4" />
               Forward
             </Button>

@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { MailSidebar } from "@/components/mail-sidebar"
-import { Button } from "@/components/ui/button"
 import {
   SidebarInset,
   SidebarProvider,
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
+import { Id } from "@/convex/_generated/dataModel"
 
 export type Email = {
 id: string
@@ -49,7 +49,8 @@ export function EmailPage({
   shouldRemoveOnToggle
 }: EmailPageProps) {
 
-  const emails = useQuery(query) as any[] | undefined
+  const emails = useQuery(query)
+  const unreadCount = useQuery(api.emails.unreadCount)
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
   const toggleTrash = useMutation(api.emails.toggleTrash)
@@ -57,7 +58,7 @@ export function EmailPage({
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
-    await toggleStar({ id: id as any })
+    await toggleStar({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       const shouldRemove = shouldRemoveOnToggle?.("star", selectedEmail)
       if (shouldRemove) {
@@ -69,7 +70,7 @@ export function EmailPage({
   }
 
   const handleToggleArchive = async (id: string) => {
-    await toggleArchive({ id: id as any })
+    await toggleArchive({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       const shouldRemove = shouldRemoveOnToggle?.("archive", selectedEmail)
       if (shouldRemove) {
@@ -81,7 +82,7 @@ export function EmailPage({
   }
 
   const handleToggleTrash = async (id: string) => {
-    await toggleTrash({ id: id as any })
+    await toggleTrash({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       const shouldRemove = shouldRemoveOnToggle?.("trash", selectedEmail)
       if (shouldRemove) {
@@ -91,14 +92,14 @@ export function EmailPage({
   }
 
   const handleMarkRead = async (id: string) => {
-    await markRead({ id: id as any })
+    await markRead({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, read: true })
     }
   }
 
   // Group emails by threadId for threading support
-  const emailGroups = (emails ?? []).reduce((groups, email) => {
+  const emailGroups = (emails ?? []).reduce((groups: Record<string, any[]>, email: any) => {
     const threadId = email.threadId || email._id // Use email ID as thread ID if no threadId
     if (!groups[threadId]) {
     groups[threadId] = []
@@ -110,7 +111,7 @@ export function EmailPage({
   // For each thread, take the latest email and add thread info
   const transformedEmails = Object.values(emailGroups).map((threadEmails) => {
   // Sort thread by receivedAt descending (latest first)
-  const sortedThread = (threadEmails as any[]).sort((a, b) => b.receivedAt - a.receivedAt)
+  const sortedThread = (threadEmails as any[]).sort((a: any, b: any) => b.receivedAt - a.receivedAt)
   const latestEmail = sortedThread[0]
   const threadCount = sortedThread.length
 
@@ -134,7 +135,7 @@ export function EmailPage({
 
   return (
     <SidebarProvider>
-      <MailSidebar activeView={activeView as "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"} />
+      <MailSidebar activeView={activeView as "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"} unreadCount={unreadCount} />
       <SidebarInset>
         <div className="flex h-full flex-col overflow-hidden">
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

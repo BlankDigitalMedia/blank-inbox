@@ -11,7 +11,7 @@ const isFalseOrUndef = (q: any, field: string) =>
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -27,7 +27,7 @@ export const list = query({
 export const listDrafts = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -40,7 +40,7 @@ export const listDrafts = query({
 export const listArchived = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -53,7 +53,7 @@ export const listArchived = query({
 export const listSent = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -66,7 +66,7 @@ export const listSent = query({
 export const listStarred = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -81,27 +81,33 @@ export const listStarred = query({
 export const contacts = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     // Get all unique email addresses from sent emails
     const sentEmails = await ctx.db
       .query("emails")
       .filter((q) => q.eq(q.field("sent"), true))
       .filter((q) => isFalseOrUndef(q, "trashed"))
-      .filter((q) => q.neq(q.field("to"), undefined))
       .collect()
 
     const contactMap = new Map<string, { address: string; name?: string; lastSeen: number; count: number }>()
 
     for (const email of sentEmails) {
-      if (email.to) {
-        const existing = contactMap.get(email.to)
+      const recipients = new Set<string>();
+      
+      const toEmails = email.to?.split(',').map(e => e.trim()).filter(Boolean) || [];
+      const ccEmails = email.cc?.split(',').map(e => e.trim()).filter(Boolean) || [];
+      
+      [...toEmails, ...ccEmails].forEach(emailAddr => recipients.add(emailAddr));
+      
+      for (const address of recipients) {
+        const existing = contactMap.get(address)
         if (existing) {
           existing.count++
           existing.lastSeen = Math.max(existing.lastSeen, email.receivedAt)
         } else {
-          contactMap.set(email.to, {
-            address: email.to,
-            name: undefined, // Could be extracted from email headers
+          contactMap.set(address, {
+            address,
+            name: undefined,
             lastSeen: email.receivedAt,
             count: 1,
           })
@@ -116,7 +122,7 @@ export const contacts = query({
 export const listTrashed = query({
   args: {},
   handler: async (ctx) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -126,28 +132,91 @@ export const listTrashed = query({
   },
 })
 
+export const unreadCount = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireUserId(ctx);
+    const emails = await ctx.db
+      .query("emails")
+      .filter((q) => q.eq(q.field("read"), false))
+      .filter((q) => isFalseOrUndef(q, "archived"))
+      .filter((q) => isFalseOrUndef(q, "trashed"))
+      .collect()
+    return emails.length
+  },
+})
+
 export const upsertFromInbound = internalMutation({
   args: {
     payload: v.any(),
   },
   handler: async (ctx, { payload }) => {
-    // Extract email data from webhook payload
-    const from = payload?.envelope?.from || payload?.from || ""
-    const to = payload?.envelope?.to || payload?.to || ""
-    const subject = payload?.subject || ""
-    const messageId = payload?.message_id || payload?.id || ""
-    const receivedAt = Date.now()
+    // Parse from nested data if it exists (Resend nests data)
+    const data = payload?.data || payload
 
-    // Create a preview from the subject or first line of text content
-    const preview = subject.length > 100 ? subject.substring(0, 100) + "..." : subject
+    // Extract email data from webhook payload
+    const from = data?.envelope?.from || data?.from || ""
+    
+    // Handle arrays for to/cc/bcc - join with ", " to create CSV strings
+    const to = Array.isArray(data?.to) 
+      ? data.to.join(", ")
+      : data?.envelope?.to || data?.to || ""
+    
+    const cc = Array.isArray(data?.cc) && data.cc.length > 0
+      ? data.cc.join(", ")
+      : undefined
+    
+    const bcc = Array.isArray(data?.bcc) && data.bcc.length > 0
+      ? data.bcc.join(", ")
+      : undefined
+    
+    const subject = data?.subject || ""
+    const messageId = data?.message_id || data?.id || ""
+    
+    // Set receivedAt from created_at or date field if present
+    const receivedAt = data?.created_at 
+      ? new Date(data.created_at).getTime()
+      : (data?.date ? new Date(data.date).getTime() : Date.now())
+
+    // Extract body from payload if available (html or text)
+    const body = data?.html || data?.text || ""
+    
+    // Create a preview from text, body, or subject
+    const previewText = data?.text || body || subject
+    const preview = previewText.length > 100 ? previewText.substring(0, 100) + "..." : previewText
+
+    // Check if messageId already exists before inserting (idempotency)
+    if (messageId) {
+      const existing = await ctx.db
+        .query("emails")
+        .withIndex("by_messageId", (q) => q.eq("messageId", messageId))
+        .first()
+      
+      if (existing) {
+        // Update the existing record instead of inserting
+        await ctx.db.patch(existing._id, {
+          from,
+          to,
+          cc,
+          bcc,
+          subject,
+          preview,
+          body,
+          receivedAt,
+        })
+        return existing._id
+      }
+    }
 
     // Insert the email record
     const docId = await ctx.db.insert("emails", {
       from,
       to,
+      cc,
+      bcc,
       subject,
       preview,
-      body: "", // Will be populated by fetchEmailBodyFromResend
+      body,
       read: false,
       starred: false,
       archived: false,
@@ -234,7 +303,7 @@ export const updateBody = internalMutation({
 export const toggleStar = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { starred: !email.starred })
@@ -244,7 +313,7 @@ export const toggleStar = mutation({
 export const toggleArchive = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { archived: !email.archived })
@@ -254,7 +323,7 @@ export const toggleArchive = mutation({
 export const toggleTrash = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
     await ctx.db.patch(id, { trashed: !email.trashed })
@@ -264,7 +333,7 @@ export const toggleTrash = mutation({
 export const markRead = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     await ctx.db.patch(id, { read: true })
   },
 })
@@ -272,7 +341,7 @@ export const markRead = mutation({
 export const deleteEmail = mutation({
   args: { id: v.id("emails") },
   handler: async (ctx, { id }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     await ctx.db.delete(id)
   },
 })
@@ -293,7 +362,7 @@ export const storeSentEmail = mutation({
     originalEmailId: v.optional(v.id("emails")),
   },
   handler: async (ctx, { from, to, cc, bcc, subject, html, text, messageId, originalEmailId }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const docId = await ctx.db.insert("emails", {
       from,
       to,
@@ -329,7 +398,7 @@ export const sendEmail = action({
     draftId: v.optional(v.id("emails")),
   },
   handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: Id<"emails"> }> => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const resendApiKey = process.env.RESEND_API_KEY
     const inboundApiKey = process.env.NEXT_INBOUND_API_KEY
     
@@ -446,7 +515,7 @@ export const saveDraft = mutation({
     threadId: v.optional(v.string()),
   },
   handler: async (ctx, { id, from, to, cc, bcc, subject, body, threadId }) => {
-    requireUserId(ctx);
+    await requireUserId(ctx);
     const timestamp = Date.now()
     const preview = body.length > 100 ? body.substring(0, 100) + "..." : body
 

@@ -22,7 +22,9 @@ export default defineSchema({
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),
     category: v.optional(v.string()),
-  }).index("by_receivedAt", ["receivedAt"]),
+  })
+    .index("by_receivedAt", ["receivedAt"])
+    .index("by_messageId", ["messageId"]),
 });
 
 

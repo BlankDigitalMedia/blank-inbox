@@ -4,7 +4,6 @@ import { useState } from "react"
 import { MailSidebar } from "@/components/mail-sidebar"
 import { DraftList } from "@/components/draft-list"
 import { DraftDetail } from "@/components/draft-detail"
-import { Button } from "@/components/ui/button"
 import {
   SidebarInset,
   SidebarProvider,
@@ -12,10 +11,11 @@ import {
 } from "@/components/ui/sidebar"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
+import { Id } from "@/convex/_generated/dataModel"
 import type { Email } from "@/components/email-page"
 
 export default function DraftsPage() {
-  const emails = useQuery(api.emails.listDrafts) as any[] | undefined
+  const emails = useQuery(api.emails.listDrafts)
   const toggleStar = useMutation(api.emails.toggleStar)
   const toggleArchive = useMutation(api.emails.toggleArchive)
   const markRead = useMutation(api.emails.markRead)
@@ -23,28 +23,28 @@ export default function DraftsPage() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
 
   const handleToggleStar = async (id: string) => {
-    await toggleStar({ id: id as any })
+    await toggleStar({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred })
     }
   }
 
   const handleToggleArchive = async (id: string) => {
-    await toggleArchive({ id: id as any })
+    await toggleArchive({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, archived: !(selectedEmail.archived ?? false) })
     }
   }
 
   const handleDeleteDraft = async (id: string) => {
-    await deleteDraft({ id: id as any })
+    await deleteDraft({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       setSelectedEmail(null)
     }
   }
 
   const handleMarkRead = async (id: string) => {
-    await markRead({ id: id as any })
+    await markRead({ id: id as Id<"emails"> })
     if (selectedEmail?.id === id) {
       setSelectedEmail({ ...selectedEmail, read: true })
     }

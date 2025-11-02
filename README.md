@@ -100,16 +100,16 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 To receive emails, configure your provider's webhook:
 
-**Webhook URL:** `https://your-domain.com/api/inbound`
+**Webhook URL:** `https://your-convex-deployment.convex.cloud/inbound`
 
 **For Resend:**
 1. Go to [Resend Dashboard → Webhooks](https://resend.com/webhooks)
-2. Add webhook URL: `https://your-domain.com/api/inbound`
+2. Add webhook URL: `https://your-convex-deployment.convex.cloud/inbound`
 3. Subscribe to `email.received` events
 
 **For inbound.new:**
 1. Go to [inbound.new Dashboard](https://inbound.new/dashboard)
-2. Set webhook URL: `https://your-domain.com/api/inbound`
+2. Set webhook URL: `https://your-convex-deployment.convex.cloud/inbound`
 3. Configure your inbound email address
 
 ---
@@ -118,7 +118,7 @@ To receive emails, configure your provider's webhook:
 
 ### Tech Stack
 
-- **Frontend:** Next.js 15, React 19, TypeScript
+- **Frontend:** Next.js 16, React 19, TypeScript
 - **Backend:** Convex (serverless functions + database)
 - **Auth:** @convex-dev/auth with Password provider
 - **UI:** shadcn/ui, Radix UI, Tailwind CSS
@@ -164,7 +164,7 @@ blank-inbox/
 2. Get API key from dashboard
 3. Set `NEXT_INBOUND_API_KEY` in `.env.local` and Convex
 4. Configure your inbound email address
-5. Set webhook URL to your `/api/inbound` endpoint
+5. Set webhook URL to your Convex deployment's `/inbound` endpoint (e.g., `https://your-convex-deployment.convex.cloud/inbound`)
 
 ### Dual-Provider Setup (Best of both)
 
@@ -259,7 +259,7 @@ This means a user already exists. This is by design—only one user per instance
 
 1. Clear browser cookies
 2. Verify `NEXT_PUBLIC_CONVEX_URL` is set correctly
-3. Check middleware.ts is protecting routes
+3. Check proxy.ts is protecting routes (Next.js 16+ uses proxy.ts instead of middleware.ts)
 4. Run `npx convex dev` to ensure schema is deployed
 
 ---

@@ -7,7 +7,7 @@
 
 - **Sign-in page:** `/signin`
 - **Protected routes:** `/` `/inbox` `/sent` `/starred` `/archive` `/drafts` `/trash` `/compose`
-- **Public routes:** `/signin` `/api/auth/*` `/api/inbound` `/_next/*` `/favicon.ico` `/robots.txt`
+- **Public routes:** `/signin` `/api/auth/*` `/_next/*` `/favicon.ico` `/robots.txt` (note: `/inbound` is a Convex HTTP endpoint, not a Next.js route)
 
 ## Exports from convex/auth.ts
 

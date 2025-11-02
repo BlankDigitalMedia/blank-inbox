@@ -1,6 +1,5 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
 import { Star, Archive, Trash2 } from "lucide-react"
 import { cn, stripHtml } from "@/lib/utils"
 import type { Email } from "@/components/email-page"
@@ -57,6 +56,7 @@ export function SharedEmailListItem({
           }}
           className="mt-1"
           type="button"
+          aria-label={email.starred ? "Unstar email" : "Star email"}
         >
           <Star
             className={cn(
@@ -74,6 +74,7 @@ export function SharedEmailListItem({
             className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
             type="button"
             title="Archive"
+            aria-label={email.archived ? "Unarchive email" : "Archive email"}
           >
             <Archive className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
@@ -87,6 +88,7 @@ export function SharedEmailListItem({
             className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
             type="button"
             title="Delete Draft"
+            aria-label="Delete draft"
           >
             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
@@ -100,6 +102,7 @@ export function SharedEmailListItem({
             className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
             type="button"
             title="Trash"
+            aria-label={email.trashed ? "Restore from trash" : "Move to trash"}
           >
             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>

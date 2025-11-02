@@ -1,21 +1,30 @@
 # AGENTS.md - Blank Inbox Project
 
 ## Build/Lint/Test Commands
-- `npm run dev` - Start Next.js development server
-- `npm run build` - Build for production
+- `npm run dev` - Start Next.js development server (uses Turbopack by default in Next.js 16)
+- `npm run build` - Build for production (uses Turbopack by default in Next.js 16)
 - `npm run start` - Start production server
-- `npm run lint` - Run ESLint
+- `npm run lint` - Run ESLint (Next.js 16 removed `next lint`, use ESLint directly)
 - No test commands configured yet
 
 ## Architecture
-- **Frontend**: Next.js 15 + React 19 + TypeScript with App Router
+- **Frontend**: Next.js 16 + React 19 + TypeScript with App Router
+  - Migrated from Next.js 15 to 16 (December 2024)
+  - Turbopack is default bundler (faster builds and dev server)
+  - Proxy.ts replaces middleware.ts for route protection
+  - All pages are client components using Convex hooks (no server components with async request APIs)
 - **Backend**: Convex (serverless functions + database)
-- **UI**: shadcn/ui components with Radix UI primitives + Tailwind CSS + Sonner for toast notifications + next-themes for dark/light mode
+- **UI**: shadcn/ui components with Radix UI primitives + Tailwind CSS + Sonner for toast notifications + next-themes for dark/light mode + Geist/Geist Mono/Source Serif 4 fonts
+- **Authentication**: Convex Auth with password-based authentication, single-user restriction (only first signup allowed), optional admin email restriction
+  - Route protection via `proxy.ts` (Next.js 16+ convention, migrated from middleware.ts)
+  - 30-day persistent cookie sessions configured in proxy
+  - Server-side enforcement: `afterUserCreatedOrUpdated` callback prevents multiple signups, `profile` function validates admin email
+  - All Convex queries/mutations/actions properly await `requireUserId()` for auth enforcement
 - **Email**: Dual-provider support for both sending and receiving
-  - **Receiving**: Webhook at `/inbound` endpoint handles both Resend and inbound.new formats
+  - **Receiving**: Webhook at `/inbound` Convex HTTP endpoint handles both Resend and inbound.new formats with idempotency (messageId index prevents duplicates)
   - **Sending**: Tries Resend first (if RESEND_API_KEY set), falls back to inbound.new (if NEXT_INBOUND_API_KEY set)
-- **Database**: Convex with emails table (from, to, cc, bcc, subject, preview, body, read/starred/archived/trashed/draft status, receivedAt, messageId, threadId, category)
-- **Routes**: `/` (inbox), `/archive`, `/starred`, `/sent`, `/compose`, `/drafts`, `/trash`
+- **Database**: Convex with emails table (from, to, cc, bcc, subject, preview, body, read/starred/archived/trashed/draft status, receivedAt, messageId, threadId, category) and users table for authentication
+- **Routes**: `/` (inbox), `/archive`, `/starred`, `/sent`, `/compose`, `/drafts`, `/trash`, `/signin`
 - **Analytics**: Vercel Analytics for tracking usage
 - **Dependencies**: Additional libraries include react-hook-form, zod (for form validation), cmdk (for search/command palette), date-fns (for date handling), lucide-react (for icons), react-resizable-panels (for resizable layouts), recharts (for data visualization), tailwind-merge (for class merging), @tiptap/react, @tiptap/starter-kit (for rich text editing in composer)
 - **Layout**: Fixed viewport frame with internal scrolling
@@ -27,20 +36,24 @@
   - Supports intents: `new`, `reply`, `replyAll`, `forward`
   - Smart sender selection based on original recipient
   - Smooth animations and focus management
+  - Auto-save with 800ms debouncing (saves drafts while typing after brief inactivity)
   - Located at `components/composer/composer.tsx`
 - **Features**:
   - Email archiving/unarchiving, starring/unstarring, trashing/restoring, multiple view filters
-  - HTML email body rendering with DOMPurify sanitization
-  - Dynamic unread email count in navigation
+  - HTML email body rendering with hardened DOMPurify sanitization (blocks images/tracking pixels, removes style attributes, enforces rel="noopener noreferrer nofollow" on links for XSS/tabnabbing protection)
+  - Dynamic unread email count badge in navigation (live updates)
   - Chronological sorting (most recent emails first)
-  - Unified compose/reply/forward experience with modern UX
+  - Unified compose/reply/forward experience with modern UX and draft management
   - Reply to emails functionality with pre-filled subject and recipient
   - Reply all to emails functionality with smart sender selection
   - Forward emails functionality with quoted original message
+  - Contact management from sent email history (extracts and splits comma-separated recipients from to/cc fields)
   - Dark/light theme toggle
   - Toast notifications for user feedback (success/error messages)
   - Search input placeholder in sidebar (functionality not yet implemented)
-  - Email threading support (threadId stored and UI implemented in detail view)
+  - Email threading support (threadId stored, UI grouping implemented in detail view)
+  - Accessibility: aria-labels on all icon-only buttons for screen reader support
+  - Composer hidden on signin page for cleaner UX
 
 ## Code Style Guidelines
 - **TypeScript**: Strict mode enabled, target ES2017
@@ -50,12 +63,29 @@
 - **Linting**: ESLint with Next.js core-web-vitals + TypeScript rules
 - **Naming**: camelCase for variables/functions, PascalCase for components
 - **Error Handling**: Standard try/catch, no custom error boundaries yet
-- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components
+- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components with full draft management (save, load, delete)
+
+## Security Hardening
+- **Next.js Security Headers** (next.config.ts): X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, Permissions-Policy restrictions
+- **HTML Sanitization**: Hardened DOMPurify config blocks XSS vectors (no style/img tags, enforced rel attributes on links)
+- **Webhook Idempotency**: messageId index prevents duplicate email creation from repeated webhook calls
+- **Server-Side Auth**: All restrictions enforced server-side via Convex callbacks (cannot be bypassed client-side)
+- **Type Safety**: Strict TypeScript mode with no `as any` bypasses in production code
 
 ## Documentation (Wave 2 Complete)
-- **README.md**: Comprehensive setup guide with Quick Start for self-hosters
+- **README.md**: Comprehensive setup guide with Quick Start for self-hosters (updated for Next.js 16)
 - **.env.example**: All environment variables documented with clear comments
 - **docs/TESTING.md**: Manual test plan with 10 test scenarios (happy path, negative tests, edge cases)
 - **docs/SECURITY.md**: Security best practices, threat model, hardening checklist
 - **docs/AUTH_CONTRACT.md**: Auth implementation contract from Wave 0/1
+- **CODE_CLEANUP.md**: Comprehensive code review findings and cleanup tasks
+- **SPRINT_SUMMARY.md**: Security hardening sprint completion summary (Nov 2025)
 
+## Next.js 16 Migration Notes
+- Migrated from Next.js 15.5.4 to 16.0.1 (December 2024)
+- **proxy.ts**: Replaced `middleware.ts` with `proxy.ts` per Next.js 16 convention (functionality unchanged, Convex Auth compatibility verified)
+- **Turbopack**: Now default bundler (no config needed, faster builds)
+- **React Types**: Removed `@types/react` and `@types/react-dom` devDependencies (React 19 includes types)
+- **No Async API Changes**: All components are client-side, no migration needed for cookies/headers/draftMode/params/searchParams
+- **Build Verification**: Production build succeeds, all routes compile correctly
+- **Cache Components**: Not applicable (app uses client components with Convex hooks; Cache Components are for server components)

@@ -1,7 +1,5 @@
 "use client"
 
-
-import { cn } from "@/lib/utils"
 import { SharedEmailListItem } from "@/components/shared/email-list-item"
 import type { Email } from "@/components/email-page"
 

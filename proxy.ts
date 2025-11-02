@@ -7,7 +7,6 @@ import {
 const isPublicPage = createRouteMatcher(["/signin"]);
 const isProtectedPage = createRouteMatcher([
   "/",
-  "/inbox",
   "/sent",
   "/starred",
   "/archive",
@@ -29,3 +28,4 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
 export const config = {
   matcher: ["/((?!_next|favicon.ico|robots.txt|.*\\..*).*)"],
 };
+

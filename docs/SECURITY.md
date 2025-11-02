@@ -28,9 +28,9 @@ Blank Inbox uses **password-based authentication** via `@convex-dev/auth`:
 
 ### Authorization
 
-- All API routes (except `/signin`, `/api/auth/*`, `/api/inbound`) require authentication
+- All routes (except `/signin`, `/api/auth/*`) require authentication
 - Convex queries/mutations verify user authentication via `getAuthUserId()`
-- Next.js middleware (`middleware.ts`) protects routes at the edge
+- Next.js proxy (`proxy.ts`) protects routes at the edge
 - Unauthorized access redirects to `/signin`
 
 ### Data Isolation
@@ -79,15 +79,16 @@ Since this is a **single-tenant application**, there is no multi-user data isola
 
 ### 4. Webhook Security
 
-Inbound emails are received via webhooks at `/api/inbound`:
+Inbound emails are received via Convex HTTP endpoint at `/inbound`:
 
 **Current implementation:**
+- Handled by Convex backend (deployed at `https://your-convex-deployment.convex.cloud/inbound`)
 - Supports both Resend and inbound.new webhook formats
 - No signature verification implemented (relies on obscure URL)
 
 **Recommendations:**
 - Enable webhook signature verification (if your provider supports it)
-- Use a secret webhook path (e.g., `/api/inbound/[random-token]`)
+- Use a secret webhook path (e.g., modify Convex HTTP route to `/inbound/[random-token]`)
 - Monitor webhook logs for suspicious activity
 - Consider IP whitelisting (if your provider has static IPs)
 

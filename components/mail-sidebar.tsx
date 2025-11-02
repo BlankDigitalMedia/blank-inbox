@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useCompose } from "@/app/providers/compose-provider"
 import { useAuthActions } from "@convex-dev/auth/react"
@@ -26,10 +25,9 @@ import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare, LogOut
 interface MailSidebarProps {
   activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"
   unreadCount?: number
-  onClose?: () => void
 }
 
-export function MailSidebar({ activeView, unreadCount = 0, onClose }: MailSidebarProps) {
+export function MailSidebar({ activeView, unreadCount = 0 }: MailSidebarProps) {
   const { openNew } = useCompose()
   const { signOut } = useAuthActions()
   const router = useRouter()

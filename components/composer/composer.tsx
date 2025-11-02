@@ -23,9 +23,10 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
+import { Id } from "@/convex/_generated/dataModel"
 import { Send, X } from "lucide-react"
 import { toast } from "sonner"
-import { cn, sanitizeHtml } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { useCompose } from "@/app/providers/compose-provider"
 import type { Email } from "@/components/email-page"
 import DOMPurify from 'dompurify'
@@ -125,7 +126,6 @@ export function Composer({
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const recentTimerRef = useRef<number | null>(null)
   const inflightRef = useRef<Promise<any> | null>(null)
-  const queuedRef = useRef(false)
   const debounced = useRef<number | null>(null)
 
   const { update } = useCompose()
@@ -296,6 +296,70 @@ export function Composer({
     },
   })
 
+  // Autosave logic
+  const performSave = useCallback(async () => {
+    if (inflightRef.current || !editor) {
+      return
+    }
+    
+    const body = editor.getHTML()
+    
+    setAutosaveStatus("saving")
+    const params = {
+      id: currentDraftId as Id<"emails"> | undefined,
+      from,
+      to: toValue || undefined,
+      cc: cc || undefined,
+      bcc: bcc || undefined,
+      subject,
+      body,
+      threadId,
+    }
+    
+    try {
+      const p = saveDraftMutation(params)
+      inflightRef.current = p
+      const savedId = await p
+      inflightRef.current = null
+      
+      if (!currentDraftId && savedId) {
+        setCurrentDraftId(savedId)
+        if (windowId) update(windowId, { draftId: savedId })
+      }
+      
+      setAutosaveStatus("saved")
+      setTimeout(() => setAutosaveStatus("idle"), 1200)
+    } catch (e) {
+      inflightRef.current = null
+      setAutosaveStatus("error")
+      console.error("Autosave failed:", e)
+    }
+  }, [from, toValue, cc, bcc, subject, threadId, currentDraftId, saveDraftMutation, windowId, update, editor])
+
+  // Set up editor update listener for autosave debouncing
+  useEffect(() => {
+    if (!editor) return
+
+    const handleUpdate = () => {
+      if (debounced.current) {
+        clearTimeout(debounced.current)
+      }
+      debounced.current = window.setTimeout(() => {
+        performSave()
+      }, 800)
+    }
+
+    editor.on('update', handleUpdate)
+
+    return () => {
+      editor.off('update', handleUpdate)
+      if (debounced.current) {
+        clearTimeout(debounced.current)
+        debounced.current = null
+      }
+    }
+  }, [editor, performSave])
+
   useEffect(() => {
     if (intent === 'new' && !from) {
       setFrom(FROM_ADDRESSES[0]?.value || "")
@@ -369,61 +433,6 @@ export function Composer({
       clearRecentTimer()
     }
   }, [clearRecentTimer])
-
-  // Autosave logic
-  const performSave = useCallback(async () => {
-    if (inflightRef.current || !editor) {
-      queuedRef.current = true
-      return
-    }
-    
-    const body = editor.getHTML()
-    
-    // Convert HTML to text for preview
-    const htmlToText = (html: string) => {
-      return html
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<[^>]+>/g, '')
-        .trim()
-    }
-    
-    setAutosaveStatus("saving")
-    const params = {
-      id: currentDraftId as any,
-      from,
-      to: toValue || undefined,
-      cc: cc || undefined,
-      bcc: bcc || undefined,
-      subject,
-      body,
-      threadId,
-    }
-    
-    try {
-      const p = saveDraftMutation(params)
-      inflightRef.current = p
-      const savedId = await p
-      inflightRef.current = null
-      
-      if (!currentDraftId && savedId) {
-        setCurrentDraftId(savedId)
-        if (windowId) update(windowId, { draftId: savedId })
-      }
-      
-      setAutosaveStatus("saved")
-      setTimeout(() => setAutosaveStatus("idle"), 1200)
-      
-      if (queuedRef.current) {
-        queuedRef.current = false
-        performSave()
-      }
-    } catch (e) {
-      inflightRef.current = null
-      setAutosaveStatus("error")
-      console.error("Autosave failed:", e)
-    }
-  }, [from, toValue, cc, bcc, subject, threadId, currentDraftId, saveDraftMutation, windowId, update, editor])
 
   const handleBlur = useCallback(() => {
     if (!editor) return
@@ -780,7 +789,7 @@ export function Composer({
 
       if (intent === 'reply' || intent === 'replyAll') {
         // email.id is the Convex _id string, cast it properly
-        sendParams.originalEmailId = email?.id as any
+        sendParams.originalEmailId = email?.id as Id<"emails">
       }
 
       if (currentDraftId) {

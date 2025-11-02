@@ -14,13 +14,19 @@ function isHtml(content: string): boolean {
 
 // Sanitize HTML content for safe rendering
 export function sanitizeHtml(html: string): string {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.hasAttribute('target')) {
+      node.setAttribute('rel', 'noopener noreferrer nofollow');
+    }
+  });
+
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code',
-      'img', 'div', 'span', 'table', 'tr', 'td', 'th', 'tbody', 'thead'
+      'div', 'span', 'table', 'tr', 'td', 'th', 'tbody', 'thead'
     ],
-    ALLOWED_ATTR: ['href', 'target', 'src', 'alt', 'title', 'style', 'class'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'alt', 'title', 'class'],
     ALLOW_DATA_ATTR: false,
   });
 }

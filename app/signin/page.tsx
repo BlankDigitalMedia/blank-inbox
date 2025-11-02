@@ -19,7 +19,7 @@ export default function SignInPage() {
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  
+
   // Check if signup is allowed (only if no users exist)
   const userCount = useQuery(api.users.count) ?? 0
   const signupAllowed = userCount === 0
@@ -29,21 +29,11 @@ export default function SignInPage() {
     setError(null)
     setLoading(true)
 
-    // Check signup restrictions
-    if (flow === "signUp") {
-      if (!signupAllowed) {
-        setError("Signup is disabled. This instance is limited to a single user.")
-        setLoading(false)
-        return
-      }
-      
-      // Check ADMIN_EMAIL restriction if set
-      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
-      if (adminEmail && email !== adminEmail) {
-        setError(`Signup is restricted to ${adminEmail}`)
-        setLoading(false)
-        return
-      }
+    // Client-side UX hint (server-side enforcement is primary)
+    if (flow === "signUp" && !signupAllowed) {
+      setError("Signup is disabled. This instance is limited to a single user.")
+      setLoading(false)
+      return
     }
 
     try {
@@ -54,13 +44,6 @@ export default function SignInPage() {
       setLoading(false)
     }
   }
-  
-  // Auto-switch to signIn if signup is not allowed
-  useEffect(() => {
-    if (!signupAllowed && flow === "signUp") {
-      setFlow("signIn")
-    }
-  }, [signupAllowed, flow])
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-4">

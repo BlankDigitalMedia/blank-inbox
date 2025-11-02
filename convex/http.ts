@@ -12,14 +12,18 @@ http.route({
   handler: httpActionGeneric(async (ctx, req) => {
     const payload = await req.json();
     
-    // Insert email metadata immediately
+    // Insert email metadata and body (if available) immediately
     const docId = await ctx.runMutation(internal.emails.upsertFromInbound, { payload });
     
     // Extract Resend email_id from webhook payload
     const emailId = payload?.data?.email_id || payload?.email_id;
+    const data = payload?.data || payload;
     
-    // If this is a Resend webhook with email_id, schedule background fetch for body content
-    if (emailId && docId) {
+    // Only schedule background fetch if body is not already populated
+    // (i.e., if html/text fields were not in the webhook payload)
+    const hasBody = data?.html || data?.text;
+    
+    if (emailId && docId && !hasBody) {
       await ctx.scheduler.runAfter(0, internal.emails.fetchEmailBodyFromResend, {
         docId,
         emailId,
