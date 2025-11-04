@@ -139,7 +139,7 @@ export function EmailDetail({
                     <span>{new Date(threadEmail.receivedAt).toLocaleString()}</span>
                   </div>
                   <div className="prose prose-sm max-w-none">
-                    <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(threadEmail.body)} />
+                    <div className="text-sm leading-relaxed text-foreground email-body-content" dangerouslySetInnerHTML={renderEmailBody(threadEmail.body)} />
                   </div>
 
                   {/* Inline reply buttons for each message */}
@@ -200,7 +200,7 @@ export function EmailDetail({
           ) : (
             <>
               <div className="prose prose-sm max-w-none">
-                <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
+                <div className="text-sm leading-relaxed text-foreground email-body-content" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
               </div>
 
               {/* Inline composer for single email */}

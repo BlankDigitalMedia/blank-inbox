@@ -137,7 +137,7 @@ export function InlineReplyEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[100px] p-2 text-sm break-words',
+        class: 'tiptap prose prose-sm max-w-none focus:outline-none min-h-[100px] p-2 text-sm break-words font-serif',
         role: 'textbox',
         'aria-multiline': 'true',
         'aria-label': 'Reply message body',

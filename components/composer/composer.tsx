@@ -294,7 +294,7 @@ export function Composer({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none h-full min-h-[200px] p-3 border rounded-md bg-background break-words',
+        class: 'tiptap prose prose-sm max-w-none focus:outline-none h-full min-h-[200px] p-3 border rounded-md bg-background break-words font-serif',
         role: 'textbox',
         'aria-multiline': 'true',
         'aria-label': 'Email message body',
@@ -977,6 +977,7 @@ export function Composer({
           onChange={(e) => setSubject(e.target.value)}
           onBlur={handleBlur}
           placeholder="Email subject"
+          className="font-serif"
         />
       </div>
       </div>

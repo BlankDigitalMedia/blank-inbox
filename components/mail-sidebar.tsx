@@ -62,21 +62,13 @@ export function MailSidebar({ activeView, unreadCount = 0 }: MailSidebarProps) {
             <Separator />
             <SidebarMenu>
               <SidebarMenuItem>
-                {activeView === "inbox" ? (
-                  <SidebarMenuButton>
+                <SidebarMenuButton asChild isActive={activeView === "inbox"}>
+                  <Link href="/">
                     <Inbox className="h-4 w-4" />
                     <span>Inbox</span>
                     {unreadCount > 0 && <SidebarMenuBadge>{unreadCount}</SidebarMenuBadge>}
-                  </SidebarMenuButton>
-                ) : (
-                  <SidebarMenuButton asChild>
-                    <Link href="/">
-                      <Inbox className="h-4 w-4" />
-                      <span>Inbox</span>
-                      {unreadCount > 0 && <SidebarMenuBadge>{unreadCount}</SidebarMenuBadge>}
-                    </Link>
-                  </SidebarMenuButton>
-                )}
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={activeView === "starred"}>

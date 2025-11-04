@@ -114,7 +114,7 @@ export function DraftDetail({ email, onToggleStar, onToggleArchive, onDeleteDraf
 
           {/* Email body */}
           <div className="prose prose-sm max-w-none">
-            <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
+            <div className="text-sm leading-relaxed text-foreground email-body-content" dangerouslySetInnerHTML={renderEmailBody(email.body)} />
           </div>
         </div>
       </div>

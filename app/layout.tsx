@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Bangers, Manrope } from 'next/font/google'
 
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -10,6 +11,18 @@ import { ComposeDockWrapper } from '@/components/compose-dock-wrapper'
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
 import { NewMailSound } from '@/components/new-mail-sound'
 import { SentMailSound } from '@/components/sent-mail-sound'
+
+const bangers = Bangers({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-bangers',
+})
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-manrope',
+})
 
 export const metadata: Metadata = {
   title: 'Blank Inbox',
@@ -23,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${bangers.variable} ${manrope.variable}`}>
       <body className={`font-sans antialiased h-dvh overflow-hidden`}>
         <ConvexAuthNextjsServerProvider>
           <ThemeProvider
