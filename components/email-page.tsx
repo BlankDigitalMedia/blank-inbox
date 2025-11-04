@@ -13,6 +13,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import type { FunctionReference } from "convex/server"
 import type { Email, EmailDoc, EmailListProps, EmailDetailProps } from "@/lib/types"
 import { useIsLargeScreen } from "@/hooks/use-is-large-screen"
+import { extractEmailAddress, normalizeEmail } from "@/lib/utils"
 
 interface EmailPageProps {
   title: string
@@ -47,6 +48,25 @@ export function EmailPage({
   const detailScrollRef = useRef<HTMLDivElement>(null)
   const savedListScrollTop = useRef<number>(0)
 
+  // Extract unique email addresses from emails for contact lookup
+  const emailAddresses = useMemo(() => {
+    if (!emails) return []
+    const addresses = new Set<string>()
+    for (const email of emails) {
+      if (email.from) {
+        const addr = normalizeEmail(extractEmailAddress(email.from))
+        if (addr) addresses.add(addr)
+      }
+    }
+    return Array.from(addresses)
+  }, [emails])
+
+  // Fetch contacts for all email addresses
+  const contactsMap = useQuery(
+    api.contacts.getContactsByEmails,
+    emailAddresses.length > 0 ? { emails: emailAddresses } : "skip"
+  ) as Record<string, { id: Id<"contacts">; name?: string }> | undefined
+
   // Transform and thread emails
   const transformedEmails: Email[] = useMemo(() => {
     const emailGroups = (emails ?? []).reduce((groups: Record<string, EmailDoc[]>, email: EmailDoc) => {
@@ -64,6 +84,10 @@ export function EmailPage({
       const latestEmail = sortedThread[0]!
       const threadCount = sortedThread.length
 
+      // Look up contact for this email's from address
+      const fromEmail = normalizeEmail(extractEmailAddress(latestEmail.from))
+      const contact = contactsMap?.[fromEmail]
+
       return {
         id: latestEmail._id,
         from: latestEmail.from,
@@ -79,9 +103,11 @@ export function EmailPage({
         threadId: latestEmail.threadId,
         threadCount,
         threadEmails: sortedThread,
+        contactId: contact?.id,
+        contactName: contact?.name,
       } as Email
     })
-  }, [emails])
+  }, [emails, contactsMap])
 
   const activeSelectedEmail = useMemo(() => {
     if (!selectedEmail) return null

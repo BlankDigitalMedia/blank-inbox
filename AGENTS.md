@@ -15,6 +15,7 @@
   - All pages are client components using Convex hooks (no server components with async request APIs)
 - **Backend**: Convex (serverless functions + database)
   - Convex TypeScript configuration (`convex/tsconfig.json`) includes path aliases (`@/*` → `../*`) to resolve shared lib imports from parent directory
+  - Pagination: Cursor-based pagination via Convex `paginate()` API for contact email queries (`getContactEmails`), returns 50 items per page with `continueCursor` for infinite scroll
 - **UI**: shadcn/ui components with Radix UI primitives + Tailwind CSS + Sonner for toast notifications + next-themes for dark/light mode
 - **Authentication**: Convex Auth with password-based authentication, single-user restriction (only first signup allowed), optional admin email restriction
   - Route protection via `proxy.ts` (Next.js 16+ convention, migrated from middleware.ts)
@@ -33,8 +34,8 @@
     - Limits: 100 recipients max, 1MB body, 500 char subject
     - Retry strategy: 3 attempts with 5s/10s/15s backoff
 - **Database**: Convex with emails table (from, to, cc, bcc, subject, preview, body, read/starred/archived/trashed/draft status, receivedAt, messageId, threadId, inReplyTo, references, replyTo, rawHeaders, category) and users table for authentication and contacts table (primaryEmail, name, emails, company, title, avatarUrl, notes, tags, lastContactedAt, crmIds, enrichment, customFields, createdAt, updatedAt)
-  - Indexes: by_messageId (idempotency), by_threadId (threading), by_read, by_archived, by_trashed, by_draft (query optimization), by_primaryEmail, by_name, by_updatedAt (contacts)
-  - Performance: Pagination limits (100 items per query)
+  - Indexes: by_messageId (idempotency), by_threadId (threading), by_receivedAt (chronological ordering), by_read, by_archived, by_trashed, by_draft (query optimization), by_primaryEmail, by_name, by_updatedAt (contacts)
+  - Performance: Pagination limits (100 items per query for most queries, 50 items per page for contact email timeline with cursor-based pagination)
 - **Routes**: `/` (inbox), `/archive`, `/starred`, `/sent`, `/compose`, `/drafts`, `/trash`, `/signin`, `/contacts`
 - **Analytics**: Vercel Analytics for tracking usage
 - **Dependencies**: Additional libraries include react-hook-form, zod (for form validation), cmdk (for search/command palette), date-fns (for date handling), lucide-react (for icons), react-resizable-panels (for resizable layouts), recharts (for data visualization), tailwind-merge (for class merging), @tiptap/react, @tiptap/starter-kit (for rich text editing in composer)
@@ -61,7 +62,8 @@
   - Reply all to emails functionality with smart sender selection
   - Forward emails functionality with quoted original message
   - Contact management from sent email history (extracts and splits comma-separated recipients from to/cc fields)
-  - Contacts management: auto-create contacts from email interactions, manual creation via "New Contact" dialog with email/name/company/title/notes/tags, manual edit with name/company/title/notes/tags, contact list page with search, contact detail view with activity metrics
+  - Contacts management: auto-create contacts from email interactions, manual creation via "New Contact" dialog with email/name/company/title/notes/tags, manual edit with name/company/title/notes/tags, contact list page with search, contact detail view with activity metrics and email history timeline
+  - Contact email history timeline: paginated timeline-style list of related email events showing sent/received emails with infinite scroll, grouped by date (Today, Yesterday, chronological), visual indicators for direction, located at `components/contacts/contact-events-timeline.tsx`
   - Dark/light theme toggle
   - Toast notifications for user feedback (success/error messages)
   - Search input placeholder in sidebar (functionality not yet implemented)
@@ -90,7 +92,7 @@
 - **Linting**: ESLint with Next.js core-web-vitals + TypeScript rules + jsx-a11y for accessibility
 - **Naming**: camelCase for variables/functions, PascalCase for components
 - **Error Handling**: Standard try/catch, no custom error boundaries yet
-- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components with full draft management (save, load, delete); contacts use shared `ContactList`, `ContactDetail`, and `NewContactDialog` components
+- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components with full draft management (save, load, delete); contacts use shared `ContactList`, `ContactDetail`, `ContactEventsTimeline`, and `NewContactDialog` components; infinite scroll pagination via reusable `InfiniteScroll` component using Intersection Observer API
 
 ## Security Hardening
 - **Next.js Security Headers** (next.config.ts): X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, Permissions-Policy restrictions, CSP and HSTS configured

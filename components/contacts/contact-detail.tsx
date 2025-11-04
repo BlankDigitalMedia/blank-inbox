@@ -11,10 +11,18 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit2, Save, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { ArrowLeft, Edit2, Save, X, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useQuery } from "convex/react"
+import { ContactEventsTimeline } from "@/components/contacts/contact-events-timeline"
 
 interface Contact {
   _id: Id<"contacts">
@@ -33,9 +41,10 @@ interface Contact {
 interface ContactDetailProps {
   contact: Contact | null
   onBack?: () => void
+  onDeleted?: () => void
 }
 
-export function ContactDetail({ contact, onBack }: ContactDetailProps) {
+export function ContactDetail({ contact, onBack, onDeleted }: ContactDetailProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [name, setName] = useState("")
   const [company, setCompany] = useState("")
@@ -43,21 +52,10 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
   const [notes, setNotes] = useState("")
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const updateContact = useMutation(api.contacts.updateContact)
-
-  // Get message count for this contact
-  const emails = useQuery(api.emails.list)
-  const sentEmails = useQuery(api.emails.listSent)
-  const messageCount = contact
-    ? [...(emails || []), ...(sentEmails || [])].filter(
-        (email) =>
-          email.from?.toLowerCase() === contact.primaryEmail.toLowerCase() ||
-          email.to?.toLowerCase() === contact.primaryEmail.toLowerCase() ||
-          email.cc?.toLowerCase().includes(contact.primaryEmail.toLowerCase()) ||
-          email.bcc?.toLowerCase().includes(contact.primaryEmail.toLowerCase())
-      ).length
-    : 0
+  const deleteContact = useMutation(api.contacts.deleteContact)
 
   const initializeForm = () => {
     if (contact) {
@@ -108,6 +106,22 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
 
   const handleRemoveTag = (tag: string) => {
     setTags(tags.filter((t) => t !== tag))
+  }
+
+  const handleDelete = async () => {
+    if (!contact) return
+
+    try {
+      await deleteContact({ id: contact._id })
+      toast.success("Contact deleted")
+      setShowDeleteDialog(false)
+      if (onDeleted) {
+        onDeleted()
+      }
+    } catch (error) {
+      console.error("Failed to delete contact:", error)
+      toast.error("Failed to delete contact")
+    }
   }
 
   const getInitials = (contact: Contact) => {
@@ -168,9 +182,20 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
                   {contact.name || contact.primaryEmail}
                 </h1>
                 {!isEditing && (
-                  <Button variant="ghost" size="icon" onClick={startEditing} aria-label="Edit contact">
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={startEditing} aria-label="Edit contact">
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setShowDeleteDialog(true)} 
+                      aria-label="Delete contact"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
               {!contact.name && <p className="text-sm text-muted-foreground">{contact.primaryEmail}</p>}
@@ -308,10 +333,6 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
               {/* Activity */}
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold">Activity</h2>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Messages</Label>
-                  <p className="text-sm">{messageCount} email{messageCount !== 1 ? "s" : ""}</p>
-                </div>
                 {contact.lastContactedAt && (
                   <div>
                     <Label className="text-xs text-muted-foreground">Last contacted</Label>
@@ -323,10 +344,39 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
                   <p className="text-sm">{formatDate(contact.createdAt)}</p>
                 </div>
               </div>
+
+              {/* Email History */}
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold">Email History</h2>
+                <ContactEventsTimeline
+                  contactId={contact._id}
+                  contactEmail={contact.primaryEmail}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Contact</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {contact.name || contact.primaryEmail}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -214,6 +214,15 @@ export const touchLastContactedSchema = z.object({
   ts: z.number().optional(),
 })
 
+export const deleteContactSchema = z.object({
+  id: z.custom<Id<"contacts">>(),
+})
+
+export const getContactEmailsSchema = z.object({
+  contactId: z.custom<Id<"contacts">>(),
+  cursor: z.string().optional(),
+})
+
 export type ContactIdInput = z.infer<typeof contactIdSchema>
 export type UpsertContactInput = z.infer<typeof upsertContactSchema>
 export type UpdateContactInput = z.infer<typeof updateContactSchema>
@@ -221,3 +230,5 @@ export type ListContactsInput = z.infer<typeof listContactsSchema>
 export type GetContactByEmailInput = z.infer<typeof getContactByEmailSchema>
 export type MergeContactsInput = z.infer<typeof mergeContactsSchema>
 export type TouchLastContactedInput = z.infer<typeof touchLastContactedSchema>
+export type DeleteContactInput = z.infer<typeof deleteContactSchema>
+export type GetContactEmailsInput = z.infer<typeof getContactEmailsSchema>

@@ -7,7 +7,8 @@ import {
   sendEmailSchema, 
   saveDraftSchema, 
   storeSentEmailSchema,
-  emailIdSchema 
+  emailIdSchema,
+  getContactEmailsSchema 
 } from "@/lib/schemas"
 import { logError, logWarning, logInfo } from "@/lib/logger"
 
@@ -210,6 +211,101 @@ export const getById = query({
     await requireUserId(ctx);
     const { id } = emailIdSchema.parse(args);
     return await ctx.db.get(id)
+  },
+})
+
+// Helper to normalize email (lowercase, trim)
+const normalizeEmail = (email: string): string => {
+  return email.trim().toLowerCase()
+}
+
+// Helper to extract all email addresses from a comma-separated string
+const extractEmailsFromString = (emailString: string): string[] => {
+  if (!emailString) return []
+  return emailString
+    .split(",")
+    .map((addr) => {
+      const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
+      return normalizeEmail(match[1] || addr.trim())
+    })
+    .filter((email) => email.length > 0)
+}
+
+export const getContactEmails = query({
+  args: {
+    contactId: v.id("contacts"),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx);
+    const { contactId, cursor } = getContactEmailsSchema.parse(args);
+    
+    // Get the contact to find all its email addresses
+    const contact = await ctx.db.get(contactId);
+    if (!contact) {
+      throw new Error("Contact not found");
+    }
+    
+    // Collect all email addresses for this contact (primaryEmail + emails array)
+    const contactEmails = new Set<string>();
+    contactEmails.add(normalizeEmail(contact.primaryEmail));
+    if (contact.emails) {
+      contact.emails.forEach((email) => contactEmails.add(normalizeEmail(email)));
+    }
+    const contactEmailSet = Array.from(contactEmails);
+    
+    // Use paginate() for cursor-based pagination
+    const result = await ctx.db
+      .query("emails")
+      .withIndex("by_receivedAt")
+      .order("desc")
+      .paginate({
+        cursor: cursor ?? null,
+        numItems: 50,
+      });
+    
+    // Filter emails where contact appears in from/to/cc/bcc fields
+    const filteredEmails = result.page.filter((email) => {
+      // Check from field
+      if (email.from) {
+        const fromNormalized = normalizeEmail(email.from);
+        if (contactEmailSet.includes(fromNormalized)) {
+          return true;
+        }
+      }
+      
+      // Check to field
+      if (email.to) {
+        const toEmails = extractEmailsFromString(email.to);
+        if (toEmails.some((addr) => contactEmailSet.includes(addr))) {
+          return true;
+        }
+      }
+      
+      // Check cc field
+      if (email.cc) {
+        const ccEmails = extractEmailsFromString(email.cc);
+        if (ccEmails.some((addr) => contactEmailSet.includes(addr))) {
+          return true;
+        }
+      }
+      
+      // Check bcc field
+      if (email.bcc) {
+        const bccEmails = extractEmailsFromString(email.bcc);
+        if (bccEmails.some((addr) => contactEmailSet.includes(addr))) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    return {
+      page: filteredEmails,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 })
 

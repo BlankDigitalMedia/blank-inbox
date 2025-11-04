@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group"
 import { Separator } from "@/components/ui/separator"
@@ -58,6 +59,7 @@ export function EmailDetail({
   onBack,
   contentRef
 }: EmailDetailProps) {
+  const router = useRouter()
   const { inlineReply, openInlineReply, closeInlineReply } = useCompose()
 
   // Cleanup inline reply when switching emails
@@ -65,6 +67,13 @@ export function EmailDetail({
     closeInlineReply()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email?.id])
+
+  const handleContactClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (email?.contactId) {
+      router.push(`/contacts?contact=${email.contactId}`)
+    }
+  }
 
   if (!email) {
     // On mobile, parent hides this pane; on desktop show empty state
@@ -85,7 +94,18 @@ export function EmailDetail({
           </Button>
           <div className="min-w-0">
             <div className="text-sm font-medium truncate max-w-[14rem]">{email.subject}</div>
-            <div className="text-xs text-muted-foreground truncate max-w-[14rem]">{email.from}</div>
+            {email.contactName && email.contactId ? (
+              <button
+                onClick={handleContactClick}
+                className="text-xs text-muted-foreground truncate max-w-[14rem] hover:underline text-left"
+                type="button"
+                aria-label={`View contact ${email.contactName}`}
+              >
+                {email.contactName}
+              </button>
+            ) : (
+              <div className="text-xs text-muted-foreground truncate max-w-[14rem]">{email.from}</div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -114,12 +134,25 @@ export function EmailDetail({
           {/* Sender info */}
           <div className="flex items-start gap-4 mb-6">
             <Avatar>
-              <AvatarFallback className="bg-primary text-primary-foreground">{email.from.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {(email.contactName || email.from).charAt(0).toUpperCase()}
+              </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">{email.from}</p>
+                  {email.contactName && email.contactId ? (
+                    <button
+                      onClick={handleContactClick}
+                      className="text-sm font-medium hover:underline text-left"
+                      type="button"
+                      aria-label={`View contact ${email.contactName}`}
+                    >
+                      {email.contactName}
+                    </button>
+                  ) : (
+                    <p className="text-sm font-medium">{email.from}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">to me</p>
                 </div>
                 <p className="text-xs text-muted-foreground">{email.time}</p>

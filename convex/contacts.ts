@@ -11,6 +11,7 @@ import {
   updateContactSchema,
   mergeContactsSchema,
   touchLastContactedSchema,
+  deleteContactSchema,
 } from "@/lib/schemas"
 
 // Helper to normalize email (lowercase, trim)
@@ -36,6 +37,26 @@ const extractEmailsFromString = (emailString: string): string[] => {
       return normalizeEmail(match[1] || addr.trim())
     })
     .filter((email) => email.length > 0)
+}
+
+// Helper to find a contact by any email (primaryEmail or emails array)
+// Checks primaryEmail first (indexed, fast), then scans emails array if needed
+async function findContactByAnyEmail(
+  ctx: any,
+  normalizedEmail: string
+): Promise<Doc<"contacts"> | null> {
+  // Check primaryEmail first (indexed, fast)
+  const byPrimary = await ctx.db
+    .query("contacts")
+    .withIndex("by_primaryEmail", (q: any) => q.eq("primaryEmail", normalizedEmail))
+    .first()
+  if (byPrimary) return byPrimary
+
+  // Check emails array (scan required, but necessary for deduplication)
+  const allContacts = await ctx.db.query("contacts").collect()
+  return (
+    allContacts.find((c: Doc<"contacts">) => c.emails?.includes(normalizedEmail)) || null
+  )
 }
 
 export const listContacts = query({
@@ -95,6 +116,49 @@ export const getContactByEmail = query({
   },
 })
 
+// Bulk lookup contacts by email addresses
+// Returns a map of normalized email -> contact (with id and name)
+export const getContactsByEmails = query({
+  args: {
+    emails: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx)
+    const normalizedEmails = args.emails.map((e) => normalizeEmail(e))
+    const emailSet = new Set(normalizedEmails)
+    
+    // Map to store results: normalized email -> { id, name }
+    const result = new Map<string, { id: Id<"contacts">; name?: string }>()
+    
+    // Query all contacts and filter by emails
+    const allContacts = await ctx.db.query("contacts").collect()
+    
+    for (const contact of allContacts) {
+      // Check primaryEmail
+      if (emailSet.has(contact.primaryEmail)) {
+        result.set(contact.primaryEmail, {
+          id: contact._id,
+          name: contact.name,
+        })
+      }
+      
+      // Check emails array
+      if (contact.emails) {
+        for (const email of contact.emails) {
+          if (emailSet.has(email)) {
+            result.set(email, {
+              id: contact._id,
+              name: contact.name,
+            })
+          }
+        }
+      }
+    }
+    
+    return Object.fromEntries(result)
+  },
+})
+
 export const getContact = query({
   args: {
     id: v.id("contacts"),
@@ -124,11 +188,8 @@ export const upsertContact = mutation({
     const normalized = normalizeEmail(primaryEmail)
     const now = Date.now()
 
-    // Check if contact exists
-    const existing = await ctx.db
-      .query("contacts")
-      .withIndex("by_primaryEmail", (q) => q.eq("primaryEmail", normalized))
-      .first()
+    // Check if contact exists (comprehensive lookup)
+    const existing = await findContactByAnyEmail(ctx, normalized)
 
     if (existing) {
       // Update existing contact
@@ -139,6 +200,7 @@ export const upsertContact = mutation({
         avatarUrl?: string
         notes?: string
         tags?: string[]
+        emails?: string[]
         updatedAt: number
       } = {
         updatedAt: now,
@@ -151,7 +213,21 @@ export const upsertContact = mutation({
       if (notes !== undefined) updatedFields.notes = notes
       if (tags !== undefined) updatedFields.tags = tags
 
-      await ctx.db.patch(existing._id, updatedFields)
+      // Ensure email is in emails array if not already present
+      const currentEmails = existing.emails || []
+      if (!currentEmails.includes(normalized)) {
+        updatedFields.emails = [...currentEmails, normalized]
+      }
+
+      // If existing contact has different primaryEmail, update it to match
+      if (existing.primaryEmail !== normalized) {
+        await ctx.db.patch(existing._id, {
+          ...updatedFields,
+          primaryEmail: normalized,
+        })
+      } else {
+        await ctx.db.patch(existing._id, updatedFields)
+      }
       return existing._id
     } else {
       // Create new contact
@@ -288,10 +364,7 @@ export const touchLastContacted = mutation({
     const normalized = normalizeEmail(email)
     const timestamp = ts ?? Date.now()
 
-    const contact = await ctx.db
-      .query("contacts")
-      .withIndex("by_primaryEmail", (q) => q.eq("primaryEmail", normalized))
-      .first()
+    const contact = await findContactByAnyEmail(ctx, normalized)
 
     if (contact) {
       await ctx.db.patch(contact._id, {
@@ -299,6 +372,24 @@ export const touchLastContacted = mutation({
         updatedAt: Date.now(),
       })
     }
+  },
+})
+
+export const deleteContact = mutation({
+  args: {
+    id: v.id("contacts"),
+  },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx)
+    const { id } = deleteContactSchema.parse(args)
+
+    const contact = await ctx.db.get(id)
+    if (!contact) {
+      throw new Error("Contact not found")
+    }
+
+    await ctx.db.delete(id)
+    return id
   },
 })
 
@@ -312,18 +403,16 @@ export const upsertContactFromEmail = internalMutation({
     const normalized = normalizeEmail(email)
     const now = Date.now()
 
-    // Check if contact exists
-    const existing = await ctx.db
-      .query("contacts")
-      .withIndex("by_primaryEmail", (q) => q.eq("primaryEmail", normalized))
-      .first()
+    // Check if contact exists (comprehensive lookup)
+    let existing = await findContactByAnyEmail(ctx, normalized)
 
     if (existing) {
-      // Update name if provided and not already set
+      // Update existing contact
       const updates: {
         name?: string
         lastContactedAt: number
         updatedAt: number
+        emails?: string[]
       } = {
         lastContactedAt: now,
         updatedAt: now,
@@ -331,6 +420,12 @@ export const upsertContactFromEmail = internalMutation({
 
       if (name && !existing.name) {
         updates.name = name
+      }
+
+      // Ensure email is in emails array if not already present
+      const currentEmails = existing.emails || []
+      if (!currentEmails.includes(normalized)) {
+        updates.emails = [...currentEmails, normalized]
       }
 
       await ctx.db.patch(existing._id, updates)
@@ -345,6 +440,88 @@ export const upsertContactFromEmail = internalMutation({
         createdAt: now,
         updatedAt: now,
       })
+
+      // Race condition recovery: check again after insert
+      // If another concurrent mutation created a duplicate, clean it up
+      // We need to check for multiple contacts with the same email
+      const byPrimary = await ctx.db
+        .query("contacts")
+        .withIndex("by_primaryEmail", (q: any) => q.eq("primaryEmail", normalized))
+        .collect()
+      
+      // Check if there are multiple contacts with this primaryEmail
+      if (byPrimary.length > 1) {
+        // Find the oldest one (first created) to keep
+        const sorted = byPrimary.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+        const keepContact = sorted[0]
+        
+        // If our contact is not the one to keep, delete it and update the kept one
+        if (keepContact._id !== contactId) {
+          await ctx.db.delete(contactId)
+          
+          // Update the kept contact with our data
+          const updates: {
+            name?: string
+            lastContactedAt: number
+            updatedAt: number
+            emails?: string[]
+          } = {
+            lastContactedAt: now,
+            updatedAt: now,
+          }
+
+          if (name && !keepContact.name) {
+            updates.name = name
+          }
+
+          // Ensure email is in emails array
+          const currentEmails = keepContact.emails || []
+          if (!currentEmails.includes(normalized)) {
+            updates.emails = [...currentEmails, normalized]
+          }
+
+          await ctx.db.patch(keepContact._id, updates)
+          return keepContact._id
+        }
+      }
+
+      // Also check if email exists in another contact's emails array
+      const allContacts = await ctx.db.query("contacts").collect()
+      const contactsWithEmail = allContacts.filter(
+        (c: Doc<"contacts">) => 
+          c.emails?.includes(normalized) && c._id !== contactId
+      )
+      
+      if (contactsWithEmail.length > 0) {
+        // Found duplicate - use the first one found
+        const existingContact = contactsWithEmail[0]
+        await ctx.db.delete(contactId)
+        
+        // Update existing contact
+        const updates: {
+          name?: string
+          lastContactedAt: number
+          updatedAt: number
+          emails?: string[]
+        } = {
+          lastContactedAt: now,
+          updatedAt: now,
+        }
+
+        if (name && !existingContact.name) {
+          updates.name = name
+        }
+
+        // Ensure email is in emails array (should already be, but just in case)
+        const currentEmails = existingContact.emails || []
+        if (!currentEmails.includes(normalized)) {
+          updates.emails = [...currentEmails, normalized]
+        }
+
+        await ctx.db.patch(existingContact._id, updates)
+        return existingContact._id
+      }
+
       return contactId
     }
   },
@@ -359,10 +536,7 @@ export const touchLastContactedInternal = internalMutation({
   handler: async (ctx, { email, ts }) => {
     const normalized = normalizeEmail(email)
 
-    const contact = await ctx.db
-      .query("contacts")
-      .withIndex("by_primaryEmail", (q) => q.eq("primaryEmail", normalized))
-      .first()
+    const contact = await findContactByAnyEmail(ctx, normalized)
 
     if (contact) {
       await ctx.db.patch(contact._id, {

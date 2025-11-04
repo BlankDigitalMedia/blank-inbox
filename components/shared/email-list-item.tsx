@@ -1,6 +1,7 @@
 "use client"
 
 import { Star, Archive, Trash2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { cn, stripHtml } from "@/lib/utils"
 import type { Email } from "@/lib/types"
 
@@ -31,6 +32,15 @@ export function SharedEmailListItem({
   showDeleteButton = false,
   useReadStyling = true,
 }: SharedEmailListItemProps) {
+  const router = useRouter()
+
+  const handleContactClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (email.contactId) {
+      router.push(`/contacts?contact=${email.contactId}`)
+    }
+  }
+
   return (
     <div
       role="button"
@@ -109,9 +119,24 @@ export function SharedEmailListItem({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-          <p className={cn("text-sm font-medium truncate", isSelected && "text-accent-foreground", useReadStyling && !email.read && "font-semibold")}>
-          {email.from}
-          </p>
+          {email.contactName && email.contactId ? (
+            <button
+              onClick={handleContactClick}
+              className={cn(
+                "text-sm font-medium truncate text-left hover:underline",
+                isSelected && "text-accent-foreground",
+                useReadStyling && !email.read && "font-semibold"
+              )}
+              type="button"
+              aria-label={`View contact ${email.contactName}`}
+            >
+              {email.contactName}
+            </button>
+          ) : (
+            <p className={cn("text-sm font-medium truncate", isSelected && "text-accent-foreground", useReadStyling && !email.read && "font-semibold")}>
+              {email.from}
+            </p>
+          )}
           <span className={cn("text-xs text-muted-foreground shrink-0", isSelected && "text-accent-foreground")}>{email.time}</span>
           </div>
           <div className="flex items-center gap-2 mb-1">

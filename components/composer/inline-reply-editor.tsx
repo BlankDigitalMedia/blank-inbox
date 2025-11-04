@@ -10,7 +10,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import { Send, X } from "lucide-react"
 import { toast } from "sonner"
 import type { Email } from "@/lib/types"
-import DOMPurify from 'dompurify'
+import { sanitizeHtml } from "@/lib/utils"
 import { useSenderSelection } from "@/hooks/use-sender-selection"
 import { useDraftAutosave } from "@/hooks/use-draft-autosave"
 
@@ -106,11 +106,7 @@ export function InlineReplyEditor({
   // Build initial content with quoted HTML
   const getInitialContent = useCallback(() => {
     if ((intent === 'reply' || intent === 'replyAll' || intent === 'forward') && email?.body) {
-      const sanitized = DOMPurify.sanitize(email.body, {
-        USE_PROFILES: { html: true },
-        FORBID_TAGS: ['script', 'style'],
-        ALLOW_UNKNOWN_PROTOCOLS: false,
-      })
+      const sanitized = sanitizeHtml(email.body)
       
       const attribution = intent === 'forward' 
         ? `<div><strong>---------- Forwarded message ---------</strong><br><strong>From:</strong> ${email.from}<br>${email.to ? `<strong>To:</strong> ${email.to}<br>` : ''}<strong>Subject:</strong> ${email.subject || ''}<br><strong>Date:</strong> ${email.time || ''}</div>`

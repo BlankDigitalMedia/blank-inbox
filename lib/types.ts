@@ -33,6 +33,8 @@ export type Email = {
   threadId?: string
   threadCount: number
   threadEmails: EmailDoc[]
+  contactId?: Id<"contacts">
+  contactName?: string
 }
 
 // Webhook payload types

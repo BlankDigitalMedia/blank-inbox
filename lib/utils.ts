@@ -122,3 +122,17 @@ export function renderEmailBody(body: string): { __html: string } {
     .replace(/'/g, '&#39;');
   return { __html: `<p>${escaped.replace(/\n/g, '<br>')}</p>` };
 }
+
+// Extract email address from email string (e.g., "John Doe <john@example.com>" -> "john@example.com")
+export function extractEmailAddress(emailString: string): string {
+  const match = emailString.match(/<([^>]+)>/)
+  if (match && match[1]) {
+    return match[1].trim()
+  }
+  return emailString.trim()
+}
+
+// Normalize email (lowercase, trim)
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}

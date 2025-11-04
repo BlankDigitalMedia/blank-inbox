@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useQuery, useMutation } from "convex/react"
+import { useState, useMemo, useEffect } from "react"
+import { useQuery } from "convex/react"
+import { useSearchParams } from "next/navigation"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
 import { MailSidebar } from "@/components/mail-sidebar"
@@ -19,29 +20,53 @@ import { useIsLargeScreen } from "@/hooks/use-is-large-screen"
 import { Plus } from "lucide-react"
 
 export default function ContactsPage() {
-  const contacts = useQuery(api.contacts.listContacts, {})
+  const searchParams = useSearchParams()
   const [selectedContactId, setSelectedContactId] = useState<Id<"contacts"> | null>(null)
   const [search, setSearch] = useState("")
   const [newContactDialogOpen, setNewContactDialogOpen] = useState(false)
 
   const isLg = useIsLargeScreen()
 
-  const filteredContacts = useMemo(() => {
-    if (!contacts) return []
-    if (!search.trim()) return contacts
+  // Use server-side search instead of client-side filtering
+  const contacts = useQuery(api.contacts.listContacts, { search: search.trim() || undefined })
 
-    const searchLower = search.toLowerCase()
-    return contacts.filter((contact) => {
-      const nameMatch = contact.name?.toLowerCase().includes(searchLower)
-      const emailMatch = contact.primaryEmail.toLowerCase().includes(searchLower)
-      return nameMatch || emailMatch
-    })
-  }, [contacts, search])
+  const filteredContacts = contacts ?? []
+
+  // Fetch specific contact if provided via query parameter (for inbox navigation)
+  const contactParam = searchParams.get("contact")
+  const contactIdFromParam = contactParam ? (contactParam as Id<"contacts">) : null
+  const specificContact = useQuery(
+    api.contacts.getContact,
+    contactIdFromParam ? { id: contactIdFromParam } : "skip"
+  )
+
+  // Handle contact query parameter from inbox navigation
+  useEffect(() => {
+    if (contactIdFromParam) {
+      setSelectedContactId(contactIdFromParam)
+      // Clean up URL parameter
+      const url = new URL(window.location.href)
+      url.searchParams.delete("contact")
+      window.history.replaceState({}, "", url.toString())
+    }
+  }, [contactIdFromParam])
 
   const selectedContact = useMemo(() => {
-    if (!selectedContactId || !contacts) return null
-    return contacts.find((c) => c._id === selectedContactId) ?? null
-  }, [selectedContactId, contacts])
+    if (!selectedContactId) return null
+    
+    // First check if it's in the filtered contacts list
+    if (contacts) {
+      const found = contacts.find((c) => c._id === selectedContactId)
+      if (found) return found
+    }
+    
+    // If not in list (e.g., search filter active), use the specifically fetched contact
+    if (contactIdFromParam === selectedContactId && specificContact) {
+      return specificContact
+    }
+    
+    return null
+  }, [selectedContactId, contacts, contactIdFromParam, specificContact])
 
   const showList = isLg || (!isLg && !selectedContact)
   const showDetail = isLg || (!isLg && !!selectedContact)
@@ -52,6 +77,10 @@ export default function ContactsPage() {
 
   const handleContactCreated = (contactId: Id<"contacts">) => {
     setSelectedContactId(contactId)
+  }
+
+  const handleContactDeleted = () => {
+    setSelectedContactId(null)
   }
 
   return (
@@ -93,6 +122,7 @@ export default function ContactsPage() {
               <ContactDetail
                 contact={selectedContact}
                 onBack={handleBack}
+                onDeleted={handleContactDeleted}
               />
             </div>
           </div>
