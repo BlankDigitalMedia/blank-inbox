@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useMemo, useReducer } from "react"
-import type { Email } from "@/components/email-page"
+import type { Email } from "@/lib/types"
 
 type DraftIntent = "new" | "reply" | "replyAll" | "forward"
 
@@ -15,7 +15,18 @@ type DraftWindow = {
   draftId?: string
 }
 
-type State = { windows: DraftWindow[]; activeId?: string }
+type InlineReply = {
+  threadId: string
+  messageId: string
+  intent: DraftIntent
+  email: Email
+}
+
+type State = { 
+  windows: DraftWindow[]
+  activeId?: string
+  inlineReply?: InlineReply
+}
 
 type Action =
   | { type: "OPEN"; payload: Omit<DraftWindow, "minimized"> }
@@ -23,6 +34,8 @@ type Action =
   | { type: "MINIMIZE"; id: string; minimized: boolean }
   | { type: "FOCUS"; id: string }
   | { type: "UPDATE"; id: string; patch: Partial<Pick<DraftWindow, "title" | "draftId">> }
+  | { type: "OPEN_INLINE"; payload: InlineReply }
+  | { type: "CLOSE_INLINE" }
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -78,6 +91,16 @@ function reducer(state: State, action: Action): State {
           w.id === action.id ? { ...w, ...action.patch } : w
         ),
       }
+    case "OPEN_INLINE":
+      return {
+        ...state,
+        inlineReply: action.payload,
+      }
+    case "CLOSE_INLINE":
+      return {
+        ...state,
+        inlineReply: undefined,
+      }
     default:
       return state
   }
@@ -86,11 +109,14 @@ function reducer(state: State, action: Action): State {
 type Ctx = {
   windows: DraftWindow[]
   activeId?: string
+  inlineReply?: InlineReply
   openNew: () => string
   openReply: (email: Email) => string
   openReplyAll: (email: Email) => string
   openForward: (email: Email) => string
   openDraft: (email: Email) => string
+  openInlineReply: (email: Email, intent: "reply" | "replyAll" | "forward") => void
+  closeInlineReply: () => void
   minimize: (id: string, minimized: boolean) => void
   close: (id: string) => void
   focus: (id: string) => void
@@ -119,6 +145,7 @@ export function ComposeProvider({ children }: { children: React.ReactNode }) {
     return {
       windows: state.windows,
       activeId: state.activeId,
+      inlineReply: state.inlineReply,
       openNew: () => open("new"),
       openReply: (email) => open("reply", email),
       openReplyAll: (email) => open("replyAll", email),
@@ -138,6 +165,18 @@ export function ComposeProvider({ children }: { children: React.ReactNode }) {
         })
         return id
       },
+      openInlineReply: (email, intent) => {
+        dispatch({
+          type: "OPEN_INLINE",
+          payload: {
+            threadId: email.threadId || email.id,
+            messageId: email.id,
+            intent,
+            email,
+          },
+        })
+      },
+      closeInlineReply: () => dispatch({ type: "CLOSE_INLINE" }),
       minimize: (id, minimized) => dispatch({ type: "MINIMIZE", id, minimized }),
       close: (id) => dispatch({ type: "CLOSE", id }),
       focus: (id) => dispatch({ type: "FOCUS", id }),

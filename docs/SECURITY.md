@@ -79,42 +79,46 @@ Since this is a **single-tenant application**, there is no multi-user data isola
 
 ### 4. Webhook Security
 
-Inbound emails are received via Convex HTTP endpoint at `/inbound`:
+Inbound emails are received via Convex HTTP endpoint at `/inbound` with comprehensive security:
 
 **Current implementation:**
-- Handled by Convex backend (deployed at `https://your-convex-deployment.convex.cloud/inbound`)
-- Supports both Resend and inbound.new webhook formats
-- No signature verification implemented (relies on obscure URL)
+- ✅ **Secret-based authentication**: `X-Webhook-Secret` header verification (shared secret approach)
+- ✅ **Rate limiting**: 60 requests/minute per IP address with automatic cleanup
+- ✅ **Request validation**:
+  - Content-Type must be `application/json` (415 Unsupported Media Type if invalid)
+  - Content-Length max 256KB (413 Payload Too Large if exceeded)
+  - POST method only (404 for other methods)
+- ✅ **Schema validation**: All payloads validated with Zod before processing
+- ✅ **Idempotency**: messageId index prevents duplicate email creation
+- ✅ **Security logging**: All violations logged to `webhook_security_logs` table
+- ✅ **Auto-cleanup**: Rate limit records deleted after 1 hour, security logs after 7 days
 
-**Recommendations:**
-- Enable webhook signature verification (if your provider supports it)
-- Use a secret webhook path (e.g., modify Convex HTTP route to `/inbound/[random-token]`)
-- Monitor webhook logs for suspicious activity
-- Consider IP whitelisting (if your provider has static IPs)
+**Setup required:**
+1. Generate a strong secret: `openssl rand -hex 32`
+2. Add to environment: `INBOUND_WEBHOOK_SECRET=your-secret`
+3. Configure webhook providers with `X-Webhook-Secret` header
+4. See [docs/WEBHOOK_SECURITY.md](file:///Users/davidblank/Documents/blank-blog/blank-inbox/docs/WEBHOOK_SECURITY.md) for detailed setup
 
-**Example signature verification (future enhancement):**
-```typescript
-// For Resend webhooks
-import { svix } from "svix";
-
-const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-const payload = await request.text();
-const headers = request.headers;
-
-try {
-  const event = svix.verify(payload, headers, webhookSecret);
-  // Process verified event
-} catch (err) {
-  return new Response("Invalid signature", { status: 401 });
-}
-```
+**Response codes:**
+- `200 OK` - Valid request processed
+- `401 Unauthorized` - Missing/invalid secret
+- `413 Payload Too Large` - Body exceeds 256KB
+- `415 Unsupported Media Type` - Wrong Content-Type
+- `429 Too Many Requests` - Rate limit exceeded
+- `500 Internal Server Error` - Secret not configured
 
 ### 5. Content Security
 
 **HTML Email Rendering:**
-- Email bodies are sanitized with **DOMPurify** before display
-- Prevents XSS attacks from malicious email content
-- External images/resources are allowed (could be disabled for privacy)
+- Email bodies are sanitized with **centralized DOMPurify** before display
+- **One-time hook initialization** prevents security configuration drift
+- **Security guards implemented**:
+  - Protocol allowlist for src/href (http, https, mailto only)
+  - Tracking pixel removal (blocks 1x1 images)
+  - iframe restricted to YouTube/Vimeo only
+  - Enforces `rel="noopener noreferrer nofollow"` on all links
+  - Blocks style tags (XSS vector)
+- Prevents XSS attacks, tabnabbing, and tracking
 
 **Attachments:**
 - Not yet implemented
@@ -176,39 +180,20 @@ Before deploying to production:
 
 ---
 
-## Security Headers (Recommended)
+## Security Headers (Implemented)
 
-Add to `next.config.ts`:
+**Status:** ✅ Complete
 
-```typescript
-const nextConfig = {
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
-        ],
-      },
-    ]
-  },
-}
-```
+All security headers are configured in `next.config.ts`:
+
+- **X-Frame-Options: DENY** - Prevents clickjacking attacks
+- **X-Content-Type-Options: nosniff** - Prevents MIME type sniffing
+- **Referrer-Policy: strict-origin-when-cross-origin** - Protects privacy
+- **Permissions-Policy** - Restricts camera, microphone, geolocation
+- **Content-Security-Policy (CSP)** - See next.config.ts for full policy
+- **Strict-Transport-Security (HSTS)** - Forces HTTPS in production
+
+These headers are applied to all routes automatically.
 
 ---
 
@@ -244,6 +229,102 @@ If you suspect a security breach:
 
 ---
 
+## Security Logging and Audit Trail
+
+Blank Inbox implements **centralized security logging** with structured JSON logs for monitoring and incident response.
+
+### What Gets Logged
+
+**Security Events (`logSecurity`):**
+- Authentication failures (unauthorized email signup attempts)
+- Authorization failures (no valid session)
+- Multiple signup attempts (single-user violation)
+- Webhook security violations (invalid signatures, rate limits, payload size)
+- Suspicious patterns (rapid requests, invalid payloads)
+
+**Operational Errors (`logError`):**
+- Email send failures (Resend/inbound.new provider errors)
+- Email fetch failures (API errors, network issues)
+- Configuration errors (missing API keys, secrets)
+
+**Warnings (`logWarning`):**
+- Retryable failures (email body fetch retries)
+- Provider fallbacks (Resend → inbound.new)
+
+**Informational (`logInfo`):**
+- Successful webhook processing
+- Email processing metadata
+
+### Log Format
+
+All logs are **JSON-structured** for easy parsing:
+
+```json
+{
+  "timestamp": "2025-11-03T12:34:56.789Z",
+  "level": "security",
+  "message": "Unauthorized access attempt - no valid session",
+  "context": {
+    "action": "authorization_failure",
+    "ip": "203.0.113.42"
+  }
+}
+```
+
+### PII Protection
+
+**NEVER logged:**
+- ❌ Email message bodies (HTML/text content)
+- ❌ Passwords or password hashes
+- ❌ API keys, tokens, or secrets
+- ❌ Personal identifiable information (names, addresses)
+
+**Safe to log:**
+- ✅ Email document IDs (Convex IDs like `jd7abc123...`)
+- ✅ IP addresses (for rate limiting/security monitoring)
+- ✅ Timestamps and event types
+- ✅ HTTP status codes and error messages
+- ✅ Action/operation names
+
+### Accessing Logs
+
+**Development:**
+```bash
+npm run dev
+# Logs appear in terminal console
+```
+
+**Production (Convex Dashboard):**
+1. Visit [Convex Dashboard](https://dashboard.convex.dev)
+2. Select your deployment
+3. Navigate to **Logs** tab
+4. Filter by log level: `error`, `security`, `warn`, `info`
+5. Search by timestamp, message, or context fields
+
+**Log Retention:**
+- **Webhook security logs**: Auto-cleaned after **7 days** (stored in `webhook_security_logs` table)
+- **Console logs (Convex)**: Retained per Convex plan limits (typically 7-30 days)
+- **Application logs**: Ephemeral (console output only, not persisted)
+
+### Monitoring Best Practices
+
+1. **Set up alerts** for `security` level logs (indicates potential attack)
+2. **Review `error` logs** regularly for operational issues
+3. **Monitor rate limit violations** (may indicate DDoS attempts)
+4. **Track authentication failures** (could indicate brute-force attacks)
+
+### Log Rotation
+
+**Webhook security logs** (stored in database):
+- Automatically cleaned up after 7 days (see `convex/webhooks.ts:logSecurityEvent`)
+- Old records deleted during new log insertion to prevent unbounded growth
+
+**Rate limit records** (stored in database):
+- Automatically cleaned up after 1 hour (see `convex/webhooks.ts:checkRateLimit`)
+- Historical data not needed beyond active rate limit window
+
+---
+
 ## Additional Resources
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
@@ -253,4 +334,4 @@ If you suspect a security breach:
 
 ---
 
-**Last Updated:** 2025-10-30
+**Last Updated:** 2025-11-03

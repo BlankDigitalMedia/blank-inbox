@@ -9,6 +9,7 @@ A modern, self-hosted email client built with Next.js, Convex, and React. Design
 - 📝 Rich text email composer with drafts
 - 🏷️ Email organization: Archive, Star, Trash, Drafts
 - 🧵 Email threading support
+- 👥 Contacts management: auto-create from emails, manual edit with tags and notes
 - 🌓 Dark/light theme toggle
 - 📱 Responsive design
 - 🔒 HTML email sanitization (XSS protection)
@@ -139,6 +140,7 @@ blank-inbox/
 ├── convex/             # Convex backend
 │   ├── auth.ts         # Authentication logic
 │   ├── emails.ts       # Email queries/mutations
+│   ├── contacts.ts     # Contact queries/mutations
 │   └── schema.ts       # Database schema
 ├── docs/               # Documentation
 │   ├── AUTH_CONTRACT.md

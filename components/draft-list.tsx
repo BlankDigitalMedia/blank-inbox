@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Trash2, MoreHorizontal } from "lucide-react"
 import { SharedEmailListItem } from "@/components/shared/email-list-item"
-import { useCompose } from "@/app/providers/compose-provider"
-import type { Email } from "@/components/email-page"
+import type { Email } from "@/lib/types"
+import { Ref } from "react"
 
 interface DraftListProps {
   emails: Email[]
@@ -14,11 +14,10 @@ interface DraftListProps {
   onToggleStar: (id: string) => void
   onToggleArchive: (id: string) => void
   onDeleteDraft: (id: string) => void
+  scrollRef?: Ref<HTMLDivElement>
 }
 
-export function DraftList({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onDeleteDraft }: DraftListProps) {
-  const { openDraft } = useCompose()
-  
+export function DraftList({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onDeleteDraft, scrollRef }: DraftListProps) {
   return (
     <div className="w-full lg:w-96 border-r border-border bg-background flex flex-col overflow-hidden">
       {/* Header */}
@@ -40,13 +39,13 @@ export function DraftList({ emails, selectedEmail, onSelectEmail, onToggleStar, 
       <Separator />
 
       {/* Draft email list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollRef}>
         {emails.map((email) => (
           <SharedEmailListItem
             key={email.id}
             email={email}
             isSelected={selectedEmail?.id === email.id}
-            onClick={() => openDraft(email)}
+            onClick={() => onSelectEmail(email)}
             onToggleStar={onToggleStar}
             onToggleArchive={onToggleArchive}
             onDeleteDraft={onDeleteDraft}

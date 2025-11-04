@@ -28,15 +28,12 @@ import { Send, X } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useCompose } from "@/app/providers/compose-provider"
-import type { Email } from "@/components/email-page"
+import type { Email } from "@/lib/types"
 import DOMPurify from 'dompurify'
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-
-const FROM_ADDRESSES = [
-  { value: "hi@daveblank.dev", label: "hi@daveblank.dev" },
-  { value: "info@daveblank.dev", label: "info@daveblank.dev" },
-]
+import { FROM_ADDRESSES, useSenderSelection } from "@/hooks/use-sender-selection"
+import { useDraftAutosave } from "@/hooks/use-draft-autosave"
 
 const ADDRESS_DELIMITER_REGEX = /[,;\n]+/
 
@@ -45,7 +42,7 @@ const parseRecipientValue = (value: string) => {
   if (!trimmed) return null
 
   const angleMatch = trimmed.match(/<([^>]+)>/)
-  const raw = angleMatch ? angleMatch[1] : trimmed
+  const raw = angleMatch?.[1] ?? trimmed
   const sanitized = raw.replace(/^[\s,;"']+|[\s,;"']+$/g, "")
   if (!sanitized) return null
   return sanitized
@@ -115,7 +112,6 @@ export function Composer({
   const [isSending, setIsSending] = useState(false)
   const [showCc, setShowCc] = useState(false)
   const [showBcc, setShowBcc] = useState(false)
-  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(initialDraftId)
   const [isToFocused, setIsToFocused] = useState(false)
   const [showRecent, setShowRecent] = useState(false)
@@ -125,14 +121,24 @@ export function Composer({
   const toInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const recentTimerRef = useRef<number | null>(null)
-  const inflightRef = useRef<Promise<any> | null>(null)
-  const debounced = useRef<number | null>(null)
 
   const { update } = useCompose()
   const sendEmail = useAction(api.emails.sendEmail)
-  const saveDraftMutation = useMutation(api.emails.saveDraft)
   const toValue = useMemo(() => toRecipients.join(", "), [toRecipients])
-  const contacts = useQuery(api.emails.contacts)
+  const contactsData = useQuery(api.contacts.listContacts, {})
+  
+  // Transform contacts to match expected format
+  const contacts = useMemo(() => {
+    if (!contactsData) return undefined
+    return contactsData.map((contact) => ({
+      address: contact.primaryEmail,
+      name: contact.name,
+      lastSeen: contact.lastContactedAt || contact.updatedAt,
+      count: 0, // Not computed in MVP
+    }))
+  }, [contactsData])
+  
+  const { selectedFrom } = useSenderSelection({ email, intent })
 
   const selectedRecipients = useMemo(() => {
     return new Set(toRecipients.map((recipient) => recipient.toLowerCase()))
@@ -289,6 +295,9 @@ export function Composer({
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none h-full min-h-[200px] p-3 border rounded-md bg-background break-words',
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-label': 'Email message body',
       },
     },
     onCreate: ({ editor }) => {
@@ -296,75 +305,35 @@ export function Composer({
     },
   })
 
-  // Autosave logic
-  const performSave = useCallback(async () => {
-    if (inflightRef.current || !editor) {
+  const { autosaveStatus, flush: flushDraft, handleBlur } = useDraftAutosave({
+    editor,
+    from,
+    to: toValue,
+    cc,
+    bcc,
+    subject,
+    threadId,
+    currentDraftId,
+    onDraftIdChange: (draftId) => {
+      setCurrentDraftId(draftId)
+      if (windowId) update(windowId, { draftId })
+    },
+  })
+
+  useEffect(() => {
+    const normalized = selectedFrom ?? ""
+
+    if (intent === "new") {
+      if (!from && normalized) {
+        setFrom(normalized)
+      }
       return
     }
-    
-    const body = editor.getHTML()
-    
-    setAutosaveStatus("saving")
-    const params = {
-      id: currentDraftId as Id<"emails"> | undefined,
-      from,
-      to: toValue || undefined,
-      cc: cc || undefined,
-      bcc: bcc || undefined,
-      subject,
-      body,
-      threadId,
-    }
-    
-    try {
-      const p = saveDraftMutation(params)
-      inflightRef.current = p
-      const savedId = await p
-      inflightRef.current = null
-      
-      if (!currentDraftId && savedId) {
-        setCurrentDraftId(savedId)
-        if (windowId) update(windowId, { draftId: savedId })
-      }
-      
-      setAutosaveStatus("saved")
-      setTimeout(() => setAutosaveStatus("idle"), 1200)
-    } catch (e) {
-      inflightRef.current = null
-      setAutosaveStatus("error")
-      console.error("Autosave failed:", e)
-    }
-  }, [from, toValue, cc, bcc, subject, threadId, currentDraftId, saveDraftMutation, windowId, update, editor])
 
-  // Set up editor update listener for autosave debouncing
-  useEffect(() => {
-    if (!editor) return
-
-    const handleUpdate = () => {
-      if (debounced.current) {
-        clearTimeout(debounced.current)
-      }
-      debounced.current = window.setTimeout(() => {
-        performSave()
-      }, 800)
+    if (normalized && from !== normalized) {
+      setFrom(normalized)
     }
-
-    editor.on('update', handleUpdate)
-
-    return () => {
-      editor.off('update', handleUpdate)
-      if (debounced.current) {
-        clearTimeout(debounced.current)
-        debounced.current = null
-      }
-    }
-  }, [editor, performSave])
-
-  useEffect(() => {
-    if (intent === 'new' && !from) {
-      setFrom(FROM_ADDRESSES[0]?.value || "")
-    }
-  }, [intent, from])
+  }, [from, intent, selectedFrom])
 
   useEffect(() => {
     if (typeof initialTo === "string") {
@@ -376,37 +345,31 @@ export function Composer({
   useEffect(() => {
     if (!email) return
 
-    const firstTo = email.to?.split(',')[0]
-    const receivedTo = firstTo ? parseRecipientValue(firstTo) : null
-    const matchingFrom = FROM_ADDRESSES.find(addr => addr.value === receivedTo)
-    setFrom(matchingFrom?.value || FROM_ADDRESSES[0]?.value || "")
-
     if (intent === 'reply') {
       setToRecipients(email?.from ? parseRecipientList(email.from) : [])
       setToInput("")
       setSubject(email.subject?.startsWith("Re:") ? email.subject : `Re: ${email.subject || ""}`)
     } else if (intent === 'replyAll') {
       const recipients = new Set<string>()
-      const ourAddresses = FROM_ADDRESSES.map(addr => addr.value)
       
       const fromAddress = email.from ? parseRecipientValue(email.from) : null
-      if (fromAddress && !ourAddresses.includes(fromAddress)) {
+      if (fromAddress && fromAddress !== selectedFrom) {
         recipients.add(fromAddress)
       }
       
       if (email.to) {
-        email.to.split(',').forEach(addr => {
+        email.to.split(',').forEach((addr: string) => {
           const parsed = parseRecipientValue(addr)
-          if (parsed && !ourAddresses.includes(parsed)) {
+          if (parsed && parsed !== selectedFrom) {
             recipients.add(parsed)
           }
         })
       }
       
       if (email.cc) {
-        email.cc.split(',').forEach(addr => {
+        email.cc.split(',').forEach((addr: string) => {
           const parsed = parseRecipientValue(addr)
-          if (parsed && !ourAddresses.includes(parsed)) {
+          if (parsed && parsed !== selectedFrom) {
             recipients.add(parsed)
           }
         })
@@ -420,7 +383,7 @@ export function Composer({
       setToInput("")
       setSubject(email.subject?.startsWith("Fwd:") ? email.subject : `Fwd: ${email.subject || ""}`)
     }
-  }, [email, intent])
+  }, [email, intent, selectedFrom])
 
   useEffect(() => {
     if (mode === 'inline' && containerRef.current) {
@@ -434,21 +397,7 @@ export function Composer({
     }
   }, [clearRecentTimer])
 
-  const handleBlur = useCallback(() => {
-    if (!editor) return
-    const body = editor.getHTML()
-    const hasContent = (intent === "new" && !!from) || !!toValue || !!cc || !!bcc || !!subject || !!body
-    if (!hasContent) return
-    performSave()
-  }, [from, toValue, cc, bcc, subject, intent, performSave, editor])
 
-  const flush = useCallback(async () => {
-    if (debounced.current) {
-      clearTimeout(debounced.current)
-      debounced.current = null
-    }
-    await performSave()
-  }, [performSave])
 
   const addRecipients = useCallback((candidates: string[]): RecipientMutationResult => {
     const result: RecipientMutationResult = { added: [], invalid: [] }
@@ -777,7 +726,17 @@ export function Composer({
           .trim()
       }
       
-      const sendParams: any = {
+      const sendParams: {
+        from: string
+        to: string
+        cc?: string
+        bcc?: string
+        subject: string
+        html: string
+        text: string
+        originalEmailId?: Id<"emails">
+        draftId?: Id<"emails">
+      } = {
         from,
         to: recipientString,
         cc: cc || undefined,
@@ -793,7 +752,7 @@ export function Composer({
       }
 
       if (currentDraftId) {
-        sendParams.draftId = currentDraftId
+        sendParams.draftId = currentDraftId as Id<"emails">
       }
 
       await sendEmail(sendParams)
@@ -1040,7 +999,7 @@ export function Composer({
           size="sm"
             onClick={async () => {
               try {
-                await flush()
+                await flushDraft()
               } catch {}
               onCancel()
             }}

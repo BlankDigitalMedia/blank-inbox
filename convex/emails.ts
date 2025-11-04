@@ -1,17 +1,73 @@
 import { action, mutation, query, internalMutation, internalAction } from "./_generated/server"
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
-import type { Id } from "./_generated/dataModel"
+import type { Id, Doc } from "./_generated/dataModel"
 import { requireUserId } from "./lib/auth"
+import { 
+  sendEmailSchema, 
+  saveDraftSchema, 
+  storeSentEmailSchema,
+  emailIdSchema 
+} from "@/lib/schemas"
+import { logError, logWarning, logInfo } from "@/lib/logger"
 
 // Helper to check if field is false or undefined (for backward compatibility)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isFalseOrUndef = (q: any, field: string) => 
   q.or(q.eq(q.field(field), false), q.eq(q.field(field), undefined))
+
+// Helper to normalize message ID (strip angle brackets and trim)
+const normalizeMessageId = (msgId: string | undefined | null): string | undefined => {
+  if (!msgId) return undefined
+  return msgId.trim().replace(/^<|>$/g, "")
+}
+
+// Helper to compute stable threadId from message headers
+const computeThreadId = ({
+  messageId,
+  inReplyTo,
+  references,
+  subject,
+}: {
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+  subject?: string
+}): string => {
+  // If references exist, use the first one (root of thread)
+  if (references && references.length > 0) {
+    return normalizeMessageId(references[0]) || ""
+  }
+  
+  // If in-reply-to exists, use it
+  if (inReplyTo) {
+    return normalizeMessageId(inReplyTo) || ""
+  }
+  
+  // Otherwise use this message's ID as the thread root
+  if (messageId) {
+    return normalizeMessageId(messageId) || ""
+  }
+  
+  // Fallback to subject fingerprint (strip Re:, Fwd:, normalize whitespace)
+  if (subject) {
+    return subject
+      .replace(/^(Re|Fwd|Fw):\s*/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+  }
+  
+  return ""
+}
 
 export const list = query({
   args: {},
   handler: async (ctx) => {
     await requireUserId(ctx);
+    // Pagination strategy: Currently returns first 100 emails.
+    // Future enhancement: Add cursor-based pagination with continueCursor/paginate()
+    // to support infinite scrolling and lazy loading of older emails.
     return await ctx.db
       .query("emails")
       .withIndex("by_receivedAt")
@@ -20,7 +76,7 @@ export const list = query({
       .filter((q) => isFalseOrUndef(q, "trashed"))
       .filter((q) => isFalseOrUndef(q, "draft"))
       .filter((q) => isFalseOrUndef(q, "sent"))
-      .collect()
+      .take(100)
   },
 })
 
@@ -30,10 +86,10 @@ export const listDrafts = query({
     await requireUserId(ctx);
     return await ctx.db
       .query("emails")
-      .withIndex("by_receivedAt")
+      .withIndex("by_draft")
       .order("desc")
       .filter((q) => q.eq(q.field("draft"), true))
-      .collect()
+      .take(100)
   },
 })
 
@@ -43,10 +99,10 @@ export const listArchived = query({
     await requireUserId(ctx);
     return await ctx.db
       .query("emails")
-      .withIndex("by_receivedAt")
+      .withIndex("by_archived")
       .order("desc")
       .filter((q) => q.eq(q.field("archived"), true))
-      .collect()
+      .take(100)
   },
 })
 
@@ -59,7 +115,7 @@ export const listSent = query({
       .withIndex("by_receivedAt")
       .order("desc")
       .filter((q) => q.eq(q.field("sent"), true))
-      .collect()
+      .take(100)
   },
 })
 
@@ -74,7 +130,7 @@ export const listStarred = query({
       .filter((q) => q.eq(q.field("starred"), true))
       .filter((q) => isFalseOrUndef(q, "trashed"))
       .filter((q) => isFalseOrUndef(q, "draft"))
-      .collect()
+      .take(100)
   },
 })
 
@@ -125,10 +181,10 @@ export const listTrashed = query({
     await requireUserId(ctx);
     return await ctx.db
       .query("emails")
-      .withIndex("by_receivedAt")
+      .withIndex("by_trashed")
       .order("desc")
       .filter((q) => q.eq(q.field("trashed"), true))
-      .collect()
+      .take(100)
   },
 })
 
@@ -136,13 +192,24 @@ export const unreadCount = query({
   args: {},
   handler: async (ctx) => {
     await requireUserId(ctx);
+    // Use by_read index for fast filtering on read status
     const emails = await ctx.db
       .query("emails")
+      .withIndex("by_read")
       .filter((q) => q.eq(q.field("read"), false))
       .filter((q) => isFalseOrUndef(q, "archived"))
       .filter((q) => isFalseOrUndef(q, "trashed"))
       .collect()
     return emails.length
+  },
+})
+
+export const getById = query({
+  args: { id: v.id("emails") },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
+    return await ctx.db.get(id)
   },
 })
 
@@ -171,7 +238,47 @@ export const upsertFromInbound = internalMutation({
       : undefined
     
     const subject = data?.subject || ""
-    const messageId = data?.message_id || data?.id || ""
+    
+    // Parse headers for threading
+    const headers = (data?.headers || {}) as Record<string, string | string[]>
+    const getHeader = (key: string): string | undefined => {
+      const val = headers[key] || headers[key.toLowerCase()]
+      return Array.isArray(val) ? val[0] : val
+    }
+    
+    const messageId = normalizeMessageId(
+      getHeader("message-id") || data?.message_id || data?.id
+    ) || ""
+    
+    const inReplyTo = normalizeMessageId(
+      getHeader("in-reply-to") || data?.in_reply_to
+    )
+    
+    const replyTo = getHeader("reply-to") || data?.reply_to
+    
+    // Parse references header (can be space-separated string or array)
+    const referencesRaw = getHeader("references") || data?.references
+    const references = Array.isArray(referencesRaw)
+      ? referencesRaw.map(normalizeMessageId).filter((r): r is string => !!r)
+      : typeof referencesRaw === "string"
+      ? referencesRaw.split(/\s+/).map(normalizeMessageId).filter((r): r is string => !!r)
+      : []
+    
+    // Cap references at 50 to prevent unbounded growth
+    const cappedReferences = references.slice(-50)
+    
+    // Compute stable threadId
+    const threadId = computeThreadId({
+      messageId,
+      inReplyTo,
+      references: cappedReferences,
+      subject,
+    })
+    
+    // Store raw headers as JSON for debugging/future use
+    const rawHeaders = Object.keys(headers).length > 0 
+      ? JSON.stringify(headers)
+      : undefined
     
     // Set receivedAt from created_at or date field if present
     const receivedAt = data?.created_at 
@@ -203,6 +310,11 @@ export const upsertFromInbound = internalMutation({
           preview,
           body,
           receivedAt,
+          inReplyTo,
+          references: cappedReferences,
+          replyTo,
+          rawHeaders,
+          threadId,
         })
         return existing._id
       }
@@ -225,12 +337,93 @@ export const upsertFromInbound = internalMutation({
       sent: false,
       receivedAt,
       messageId,
+      inReplyTo,
+      references: cappedReferences,
+      replyTo,
+      rawHeaders,
+      threadId,
     })
+
+    // Upsert contacts from email participants
+    const extractNameFromEmailString = (emailString: string): string | undefined => {
+      const match = emailString.match(/^(.+?)\s*<(.+)>$/)
+      if (match && match[1]) {
+        return match[1].trim()
+      }
+      return undefined
+    }
+
+    const normalizeEmail = (email: string): string => {
+      return email.trim().toLowerCase()
+    }
+
+    const extractEmailsFromString = (emailString: string): string[] => {
+      return emailString
+        .split(",")
+        .map((addr) => {
+          const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
+          return normalizeEmail(match[1] || addr.trim())
+        })
+        .filter((email) => email.length > 0)
+    }
+
+    // Process 'from' field
+    if (from) {
+      const fromNormalized = normalizeEmail(from)
+      const name = extractNameFromEmailString(from)
+      await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+        email: fromNormalized,
+        name,
+      })
+      await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+        email: fromNormalized,
+        ts: receivedAt,
+      })
+    }
+
+    // Process 'to' field
+    if (to) {
+      const toEmails = extractEmailsFromString(to)
+      for (const addr of toEmails) {
+        await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+          email: addr,
+        })
+        await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+          email: addr,
+          ts: receivedAt,
+        })
+      }
+    }
+
+    // Process 'cc' field
+    if (cc) {
+      const ccEmails = extractEmailsFromString(cc)
+      for (const addr of ccEmails) {
+        await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+          email: addr,
+        })
+        await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+          email: addr,
+          ts: receivedAt,
+        })
+      }
+    }
 
     return docId
   },
 })
 
+/**
+ * Fetch full email body from Resend API (for webhook payloads without body)
+ * 
+ * RETRY STRATEGY (handle transient failures):
+ * - Max attempts: 3
+ * - Retry on: 404 (not ready), 429 (rate limit), 5xx (server error)
+ * - Backoff: 5s, 10s, 15s (linear with 15s cap)
+ * - Timeout: 30 seconds per attempt (Convex action limit)
+ * 
+ * Triggered by: upsertFromInbound when payload lacks html/text fields
+ */
 export const fetchEmailBodyFromResend = internalAction({
   args: {
     docId: v.id("emails"),
@@ -240,7 +433,10 @@ export const fetchEmailBodyFromResend = internalAction({
   handler: async (ctx, { docId, emailId, attempt }) => {
     const resendApiKey = process.env.RESEND_API_KEY
     if (!resendApiKey) {
-      console.error("RESEND_API_KEY not configured")
+      logError("RESEND_API_KEY not configured", {
+        action: "fetch_email_body",
+        emailId: emailId,
+      })
       return
     }
 
@@ -253,7 +449,11 @@ export const fetchEmailBodyFromResend = internalAction({
       })
 
       if (!response.ok) {
-        console.error(`Failed to fetch email ${emailId}: ${response.status}`)
+        logWarning("Failed to fetch email body from Resend API", {
+          action: "fetch_email_body",
+          emailId: emailId,
+          metadata: { status: response.status, attempt },
+        })
         // Retry on 404, 429, and 5xx errors
         const shouldRetry = response.status === 404 || response.status === 429 || (response.status >= 500 && response.status < 600)
         if (shouldRetry && attempt < 3) {
@@ -276,7 +476,11 @@ export const fetchEmailBodyFromResend = internalAction({
       })
 
     } catch (error) {
-      console.error("Error fetching Resend email body:", error)
+      logError("Error fetching Resend email body", {
+        action: "fetch_email_body",
+        emailId: emailId,
+        metadata: { error: String(error), attempt },
+      })
       // If we haven't exceeded max attempts, retry
       if (attempt < 3) {
         const delayMs = Math.min(15000, attempt * 5000)
@@ -302,46 +506,91 @@ export const updateBody = internalMutation({
 
 export const toggleStar = mutation({
   args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
-    await ctx.db.patch(id, { starred: !email.starred })
+    // Type assertion: we know this is an email because we fetched by email ID
+    const emailDoc = email as Doc<"emails">
+    await ctx.db.patch(id, { starred: !emailDoc.starred })
   },
 })
 
 export const toggleArchive = mutation({
   args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
-    await ctx.db.patch(id, { archived: !email.archived })
+    // Type assertion: we know this is an email because we fetched by email ID
+    const emailDoc = email as Doc<"emails">
+
+    const nextArchivedValue = !(emailDoc.archived ?? false)
+
+    if (emailDoc.threadId) {
+      const threadEmails = await ctx.db
+        .query("emails")
+        .withIndex("by_threadId", (q) => q.eq("threadId", emailDoc.threadId!))
+        .collect()
+
+      if (threadEmails.length > 0) {
+        for (const threadEmail of threadEmails) {
+          await ctx.db.patch(threadEmail._id, { archived: nextArchivedValue })
+        }
+        return
+      }
+    }
+
+    await ctx.db.patch(id, { archived: nextArchivedValue })
   },
 })
 
 export const toggleTrash = mutation({
   args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
     const email = await ctx.db.get(id)
     if (!email) throw new Error("Email not found")
-    await ctx.db.patch(id, { trashed: !email.trashed })
+    // Type assertion: we know this is an email because we fetched by email ID
+    const emailDoc = email as Doc<"emails">
+
+    const nextTrashedValue = !(emailDoc.trashed ?? false)
+
+    if (emailDoc.threadId) {
+      const threadEmails = await ctx.db
+        .query("emails")
+        .withIndex("by_threadId", (q) => q.eq("threadId", emailDoc.threadId!))
+        .collect()
+
+      if (threadEmails.length > 0) {
+        for (const threadEmail of threadEmails) {
+          await ctx.db.patch(threadEmail._id, { trashed: nextTrashedValue })
+        }
+        return
+      }
+    }
+
+    await ctx.db.patch(id, { trashed: nextTrashedValue })
   },
 })
 
 export const markRead = mutation({
   args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
     await ctx.db.patch(id, { read: true })
   },
 })
 
 export const deleteEmail = mutation({
   args: { id: v.id("emails") },
-  handler: async (ctx, { id }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id } = emailIdSchema.parse(args);
     await ctx.db.delete(id)
   },
 })
@@ -360,9 +609,31 @@ export const storeSentEmail = mutation({
     text: v.string(),
     messageId: v.string(),
     originalEmailId: v.optional(v.id("emails")),
+    originalEmail: v.optional(v.any()),
   },
-  handler: async (ctx, { from, to, cc, bcc, subject, html, text, messageId, originalEmailId }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { from, to, cc, bcc, subject, html, text, messageId, originalEmailId, originalEmail } = storeSentEmailSchema.parse(args);
+    
+    // Compute threading fields if this is a reply
+    let threadId: string | undefined
+    let inReplyTo: string | undefined
+    let references: string[] | undefined
+    
+    if (originalEmail && originalEmailId) {
+      inReplyTo = originalEmail.messageId
+      references = [
+        ...(originalEmail.references || []),
+        originalEmail.messageId,
+      ].filter((ref): ref is string => typeof ref === 'string').slice(-50)
+      
+      // Use original's threadId if available
+      threadId = originalEmail.threadId
+    } else {
+      // New message - use this message's ID as the thread root
+      threadId = normalizeMessageId(messageId)
+    }
+    
     const docId = await ctx.db.insert("emails", {
       from,
       to,
@@ -378,13 +649,94 @@ export const storeSentEmail = mutation({
       draft: false,
       sent: true,
       receivedAt: Date.now(),
-      messageId,
-      threadId: originalEmailId?.toString(),
+      messageId: normalizeMessageId(messageId),
+      threadId,
+      inReplyTo,
+      references,
     })
+
+    // Upsert contacts from email participants
+    const extractNameFromEmailString = (emailString: string): string | undefined => {
+      const match = emailString.match(/^(.+?)\s*<(.+)>$/)
+      if (match && match[1]) {
+        return match[1].trim()
+      }
+      return undefined
+    }
+
+    const normalizeEmail = (email: string): string => {
+      return email.trim().toLowerCase()
+    }
+
+    const extractEmailsFromString = (emailString: string): string[] => {
+      return emailString
+        .split(",")
+        .map((addr) => {
+          const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
+          return normalizeEmail(match[1] || addr.trim())
+        })
+        .filter((email) => email.length > 0)
+    }
+
+    const receivedAt = Date.now()
+
+    // Process 'to' field
+    if (to) {
+      const toEmails = extractEmailsFromString(to)
+      for (const addr of toEmails) {
+        await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+          email: addr,
+        })
+        await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+          email: addr,
+          ts: receivedAt,
+        })
+      }
+    }
+
+    // Process 'cc' field
+    if (cc) {
+      const ccEmails = extractEmailsFromString(cc)
+      for (const addr of ccEmails) {
+        await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+          email: addr,
+        })
+        await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+          email: addr,
+          ts: receivedAt,
+        })
+      }
+    }
+
+    // Process 'bcc' field
+    if (bcc) {
+      const bccEmails = extractEmailsFromString(bcc)
+      for (const addr of bccEmails) {
+        await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
+          email: addr,
+        })
+        await ctx.scheduler.runAfter(0, internal.contacts.touchLastContactedInternal, {
+          email: addr,
+          ts: receivedAt,
+        })
+      }
+    }
+
     return docId
   },
 })
 
+/**
+ * Send an email via Resend or inbound.new
+ * 
+ * LIMITS (prevent abuse and ensure deliverability):
+ * - Max recipients: 100 total across to/cc/bcc fields
+ * - Max body size: 1MB (HTML + text combined)
+ * - Max subject length: 500 characters
+ * - Timeout: 30 seconds (enforced by Convex action limit)
+ * 
+ * To adjust limits, modify validation below.
+ */
 export const sendEmail = action({
   args: {
     from: v.string(),
@@ -397,13 +749,64 @@ export const sendEmail = action({
     originalEmailId: v.optional(v.id("emails")),
     draftId: v.optional(v.id("emails")),
   },
-  handler: async (ctx, { from, to, cc, bcc, subject, html, text, originalEmailId, draftId }): Promise<{ success: boolean; messageId: string; docId: Id<"emails"> }> => {
+  handler: async (ctx, args): Promise<{ success: boolean; messageId: string; docId: Id<"emails"> }> => {
     await requireUserId(ctx);
+    const { from, to, cc, bcc, subject, html, text, originalEmailId, draftId } = sendEmailSchema.parse(args);
+    
+    // Enforce sending limits (prevent abuse)
+    const MAX_RECIPIENTS = 100;
+    const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+    const MAX_SUBJECT_LENGTH = 500;
+    
+    // Validate recipient count
+    const toCount = to.split(',').filter((e: string) => e.trim()).length;
+    const ccCount = cc ? cc.split(',').filter((e: string) => e.trim()).length : 0;
+    const bccCount = bcc ? bcc.split(',').filter((e: string) => e.trim()).length : 0;
+    const totalRecipients = toCount + ccCount + bccCount;
+    
+    if (totalRecipients > MAX_RECIPIENTS) {
+      throw new Error(`Too many recipients: ${totalRecipients} (max: ${MAX_RECIPIENTS})`);
+    }
+    
+    // Validate body size (HTML + text)
+    const bodySize = (html?.length || 0) + (text?.length || 0);
+    if (bodySize > MAX_BODY_SIZE) {
+      throw new Error(`Email body too large: ${Math.round(bodySize / 1024)}KB (max: ${MAX_BODY_SIZE / 1024}KB)`);
+    }
+    
+    // Validate subject length
+    if (subject.length > MAX_SUBJECT_LENGTH) {
+      throw new Error(`Subject too long: ${subject.length} characters (max: ${MAX_SUBJECT_LENGTH})`);
+    }
     const resendApiKey = process.env.RESEND_API_KEY
     const inboundApiKey = process.env.NEXT_INBOUND_API_KEY
     
     if (!resendApiKey && !inboundApiKey) {
       throw new Error("No email provider configured. Set RESEND_API_KEY or NEXT_INBOUND_API_KEY")
+    }
+
+    // Fetch original email to build threading headers if replying
+    let threadingHeaders: Record<string, string> | undefined
+    let originalEmail: Doc<"emails"> | null = null
+    if (originalEmailId) {
+      const fetchedEmail = await ctx.runQuery(api.emails.getById, { id: originalEmailId })
+      if (fetchedEmail) {
+        // Type assertion: getById returns an email document
+        originalEmail = fetchedEmail as Doc<"emails">
+        const inReplyTo = originalEmail.messageId
+        // Build references array: original's references + original's messageId
+        const newReferences = [
+          ...(originalEmail.references || []),
+          originalEmail.messageId,
+        ].filter((ref): ref is string => typeof ref === 'string').slice(-50)
+        
+        if (inReplyTo) {
+          threadingHeaders = {
+            "In-Reply-To": `<${inReplyTo}>`,
+            "References": newReferences.map((ref: string) => `<${ref}>`).join(" "),
+          }
+        }
+      }
     }
 
     let messageId: string | undefined
@@ -426,6 +829,7 @@ export const sendEmail = action({
             subject,
             html,
             text,
+            headers: threadingHeaders,
           }),
         })
 
@@ -438,7 +842,10 @@ export const sendEmail = action({
         messageId = result.id
       } catch (error) {
         sendError = error as Error
-        console.error("Resend send failed:", error)
+        logWarning("Resend email send failed, will try fallback", {
+          action: "send_email",
+          metadata: { error: String(error), hasFallback: !!inboundApiKey },
+        })
         
         // If inbound.new is not available, throw the error
         if (!inboundApiKey) {
@@ -461,12 +868,16 @@ export const sendEmail = action({
           subject,
           html,
           text,
-        })
+          ...(threadingHeaders ? { headers: threadingHeaders } : {}),
+        }) as { messageId?: string; id?: string }
 
-        messageId = (result as any).messageId || (result as any).id || `inbound-${Date.now()}`
+        messageId = result.messageId || result.id || `inbound-${Date.now()}`
       } catch (error) {
         const inboundError = error as Error
-        console.error("inbound.new send failed:", error)
+        logError("inbound.new email send failed", {
+          action: "send_email",
+          metadata: { error: String(error), hadResendFallback: !!sendError },
+        })
         
         // If both providers failed, throw combined error
         if (sendError) {
@@ -492,6 +903,7 @@ export const sendEmail = action({
       text,
       messageId,
       originalEmailId,
+      originalEmail,
     })
 
     // If this was from a draft, delete the draft
@@ -503,6 +915,16 @@ export const sendEmail = action({
   },
 })
 
+/**
+ * Save a draft email (create or update)
+ * 
+ * LIMITS (prevent unbounded storage growth):
+ * - Max body size: 1MB (HTML content)
+ * - Max subject length: 500 characters
+ * - Called via auto-save with 800ms debounce
+ * 
+ * To adjust limits, modify validation below.
+ */
 export const saveDraft = mutation({
   args: {
     id: v.optional(v.id("emails")),
@@ -514,8 +936,21 @@ export const saveDraft = mutation({
     body: v.string(),
     threadId: v.optional(v.string()),
   },
-  handler: async (ctx, { id, from, to, cc, bcc, subject, body, threadId }) => {
+  handler: async (ctx, args) => {
     await requireUserId(ctx);
+    const { id, from, to, cc, bcc, subject, body, threadId } = saveDraftSchema.parse(args);
+    
+    // Enforce draft size limits (prevent storage abuse)
+    const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+    const MAX_SUBJECT_LENGTH = 500;
+    
+    if (body.length > MAX_BODY_SIZE) {
+      throw new Error(`Draft body too large: ${Math.round(body.length / 1024)}KB (max: ${MAX_BODY_SIZE / 1024}KB)`);
+    }
+    
+    if (subject.length > MAX_SUBJECT_LENGTH) {
+      throw new Error(`Subject too long: ${subject.length} characters (max: ${MAX_SUBJECT_LENGTH})`);
+    }
     const timestamp = Date.now()
     const preview = body.length > 100 ? body.substring(0, 100) + "..." : body
 
@@ -554,3 +989,43 @@ export const saveDraft = mutation({
   },
 })
 
+export const backfillThreadIds = internalMutation({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, { batchSize = 100 }) => {
+    const emails = await ctx.db
+      .query("emails")
+      .collect()
+      .then(emails => emails.slice(0, batchSize))
+    
+    let updated = 0
+    
+    for (const email of emails) {
+      // Skip if threadId already looks valid (not a Convex ID format)
+      if (email.threadId && !email.threadId.startsWith("j") && email.threadId.length > 20) {
+        continue
+      }
+      
+      // Compute new threadId based on existing fields
+      const newThreadId = computeThreadId({
+        messageId: email.messageId,
+        inReplyTo: email.inReplyTo,
+        references: email.references,
+        subject: email.subject,
+      })
+      
+      // Only update if we computed a different threadId
+      if (newThreadId && newThreadId !== email.threadId) {
+        await ctx.db.patch(email._id, {
+          threadId: newThreadId,
+          // Ensure references is an array if it exists
+          references: email.references || undefined,
+        })
+        updated++
+      }
+    }
+    
+    return { processed: emails.length, updated }
+  },
+})

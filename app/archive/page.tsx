@@ -11,7 +11,7 @@ export default function ArchivePage() {
       title="Archive"
       activeView="archive"
       query={api.emails.listArchived}
-      ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash }) => (
+      ListComponent={({ emails, selectedEmail, onSelectEmail, onToggleStar, onToggleArchive, onToggleTrash, scrollRef }) => (
       <EmailList
       emails={emails}
       selectedEmail={selectedEmail}
@@ -19,8 +19,9 @@ export default function ArchivePage() {
       onToggleStar={onToggleStar}
       onToggleArchive={onToggleArchive}
       onToggleTrash={onToggleTrash}
-      showArchiveButton={false} // Archive view doesn't need archive button
+      showArchiveButton={false}
       showTrashButton={true}
+      scrollRef={scrollRef}
       />
       )}
       DetailComponent={({ email, onToggleStar, onToggleArchive, onToggleTrash }) => (

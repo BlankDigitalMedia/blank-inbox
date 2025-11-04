@@ -20,10 +20,10 @@ import {
   SidebarMenuBadge,
   SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare, LogOut } from "lucide-react"
+import { Inbox, Send, FileText, Archive, Trash2, Star, Search, PenSquare, LogOut, Users } from "lucide-react"
 
 interface MailSidebarProps {
-  activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts"
+  activeView?: "inbox" | "starred" | "sent" | "archive" | "trash" | "drafts" | "contacts"
   unreadCount?: number
 }
 
@@ -56,7 +56,7 @@ export function MailSidebar({ activeView, unreadCount = 0 }: MailSidebarProps) {
             <div className="px-2 pb-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <SidebarInput placeholder="Search mail..." className="pl-9" />
+                <SidebarInput placeholder="Search mail..." className="pl-9" aria-label="Search mail" />
               </div>
             </div>
             <Separator />
@@ -116,6 +116,14 @@ export function MailSidebar({ activeView, unreadCount = 0 }: MailSidebarProps) {
                   <Link href="/trash">
                     <Trash2 className="h-4 w-4" />
                     <span>Trash</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={activeView === "contacts"}>
+                  <Link href="/contacts">
+                    <Users className="h-4 w-4" />
+                    <span>Contacts</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

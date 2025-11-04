@@ -18,7 +18,13 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+
+    /* Path aliases to resolve @/* imports from parent directory */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../*"]
+    }
   },
   "include": ["./**/*"],
   "exclude": ["./_generated"]

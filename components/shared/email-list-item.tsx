@@ -2,7 +2,7 @@
 
 import { Star, Archive, Trash2 } from "lucide-react"
 import { cn, stripHtml } from "@/lib/utils"
-import type { Email } from "@/components/email-page"
+import type { Email } from "@/lib/types"
 
 interface SharedEmailListItemProps {
   email: Email

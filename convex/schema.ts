@@ -22,9 +22,59 @@ export default defineSchema({
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),
     category: v.optional(v.string()),
+    inReplyTo: v.optional(v.string()),
+    references: v.optional(v.array(v.string())),
+    replyTo: v.optional(v.string()),
+    rawHeaders: v.optional(v.string()),
   })
-    .index("by_receivedAt", ["receivedAt"])
-    .index("by_messageId", ["messageId"]),
+    // Performance indexes for filtered queries
+    .index("by_receivedAt", ["receivedAt"]) // Chronological ordering (inbox, sent, etc.)
+    .index("by_messageId", ["messageId"])    // Idempotency check for webhook deduplication
+    .index("by_threadId", ["threadId"])       // Thread grouping for conversation view
+    .index("by_read", ["read"])               // Unread count queries (fast filtering)
+    .index("by_archived", ["archived"])       // Archive view queries
+    .index("by_trashed", ["trashed"])         // Trash view queries
+    .index("by_draft", ["draft"]),            // Draft view queries
+  webhook_rate_limits: defineTable({
+    ip: v.string(),
+    minuteBucket: v.number(),
+    count: v.number(),
+  })
+    .index("by_ip_bucket", ["ip", "minuteBucket"]),
+  webhook_security_logs: defineTable({
+    timestamp: v.number(),
+    ip: v.string(),
+    eventType: v.string(),
+    details: v.optional(v.string()),
+  })
+    .index("by_timestamp", ["timestamp"]),
+  contacts: defineTable({
+    primaryEmail: v.string(),
+    name: v.optional(v.string()),
+    emails: v.optional(v.array(v.string())),
+    company: v.optional(v.string()),
+    title: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    lastContactedAt: v.optional(v.number()),
+    crmIds: v.optional(v.object({
+      hubspot: v.optional(v.string()),
+      salesforce: v.optional(v.string()),
+      pipedrive: v.optional(v.string()),
+    })),
+    enrichment: v.optional(v.object({
+      source: v.optional(v.string()),
+      data: v.optional(v.any()),
+      updatedAt: v.optional(v.number()),
+    })),
+    customFields: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_primaryEmail", ["primaryEmail"])
+    .index("by_name", ["name"])
+    .index("by_updatedAt", ["updatedAt"]),
 });
 
 

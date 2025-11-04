@@ -222,6 +222,7 @@ This document outlines the manual test plan for the Blank Inbox authentication a
 **Prerequisites:**
 - Webhook URL configured with email provider (Resend or inbound.new)
 - `NEXT_INBOUND_API_KEY` set
+- `INBOUND_WEBHOOK_SECRET` configured
 
 **Steps:**
 1. Send email to your inbox's inbound address
@@ -233,6 +234,86 @@ This document outlines the manual test plan for the Blank Inbox authentication a
 - ✅ Email is received via webhook
 - ✅ Email is stored in Convex database
 - ✅ Email appears in inbox
+
+---
+
+### 11. Webhook Security Tests
+
+**Objective:** Verify webhook endpoint security measures work correctly.
+
+**Prerequisites:**
+- `INBOUND_WEBHOOK_SECRET` configured
+- `test-webhook-security.sh` script available
+
+**Steps:**
+1. Run test script: `./test-webhook-security.sh http://localhost:3000/inbound`
+2. Verify all 7 security tests pass:
+   - Test 1: Missing secret header → 401
+   - Test 2: Invalid secret → 401
+   - Test 3: Missing Content-Type → 415
+   - Test 4: Wrong HTTP method → 404
+   - Test 5: Oversized payload → 413
+   - Test 6: Valid request → 200
+   - Test 7: Rate limit → 429 (after 60 requests)
+
+**Expected Results:**
+- ✅ All authentication checks work
+- ✅ Content validation works
+- ✅ Rate limiting works
+- ✅ Security events logged to `webhook_security_logs` table
+
+---
+
+### 12. Security Headers Tests
+
+**Objective:** Verify security headers are present on all routes.
+
+**Steps:**
+1. Open browser DevTools (Network tab)
+2. Navigate to various routes: `/`, `/signin`, `/inbox`, `/sent`, etc.
+3. Inspect response headers for each request
+
+**Expected Headers:**
+- ✅ `X-Frame-Options: DENY`
+- ✅ `X-Content-Type-Options: nosniff`
+- ✅ `Referrer-Policy: strict-origin-when-cross-origin`
+- ✅ `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- ✅ `Content-Security-Policy` (production)
+- ✅ `Strict-Transport-Security` (production HTTPS only)
+
+**Alternative Testing (cURL):**
+```bash
+curl -I http://localhost:3000/
+# Verify headers in output
+```
+
+---
+
+### 13. Accessibility Tests
+
+**Objective:** Verify accessibility features work correctly.
+
+**Prerequisites:**
+- Screen reader installed (VoiceOver on macOS, NVDA on Windows)
+
+**Steps:**
+1. Run ESLint: `npm run lint` (should have no jsx-a11y violations)
+2. Test keyboard navigation:
+   - Tab through all interactive elements
+   - Verify focus indicators are visible
+   - Test dialog focus trapping
+3. Test with screen reader:
+   - Navigate through email list
+   - Activate icon-only buttons (should announce purpose)
+   - Fill out composer form (should announce field labels)
+   - Verify toast notifications are announced
+
+**Expected Results:**
+- ✅ No jsx-a11y ESLint errors
+- ✅ All interactive elements reachable via keyboard
+- ✅ Icon buttons have aria-labels
+- ✅ Form fields have proper labels
+- ✅ Screen reader can navigate all UI elements
 
 ---
 

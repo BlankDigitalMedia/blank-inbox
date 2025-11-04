@@ -14,10 +14,12 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as auth from "../auth.js";
+import type * as contacts from "../contacts.js";
 import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as users from "../users.js";
+import type * as webhooks from "../webhooks.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -29,10 +31,12 @@ import type * as users from "../users.js";
  */
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  contacts: typeof contacts;
   emails: typeof emails;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   users: typeof users;
+  webhooks: typeof webhooks;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

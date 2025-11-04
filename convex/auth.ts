@@ -2,6 +2,7 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { DataModel } from "./_generated/dataModel";
 import { Value, ConvexError } from "convex/values";
+import { logSecurity } from "@/lib/logger";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
@@ -13,6 +14,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         
         // Server-side email restriction enforcement if configured
         if (params.flow === "signUp" && ADMIN_EMAIL && email !== ADMIN_EMAIL) {
+          logSecurity("Signup attempt with unauthorized email", {
+            action: "signup_rejected",
+            metadata: { attemptedEmail: email, allowedEmail: ADMIN_EMAIL },
+          });
           throw new ConvexError({
             message: `Registration is restricted to ${ADMIN_EMAIL}`,
             code: "INVALID_EMAIL"
@@ -34,7 +39,13 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (users.length > 1) {
         // Find and delete the newly created user (has the most recent _creationTime)
         const sortedUsers = [...users].sort((a, b) => (b._creationTime ?? 0) - (a._creationTime ?? 0));
-        await ctx.db.delete(sortedUsers[0]._id);
+        const rejectedUserId = sortedUsers[0]._id;
+        await ctx.db.delete(rejectedUserId);
+        
+        logSecurity("Multiple signup attempt blocked (single-user violation)", {
+          action: "duplicate_signup_rejected",
+          metadata: { userCount: users.length },
+        });
         
         throw new ConvexError({
           message: "Registration is closed. This instance only allows a single user.",
