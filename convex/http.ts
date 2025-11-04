@@ -1,7 +1,7 @@
 import { httpActionGeneric, httpRouter } from "convex/server";
 import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
-import { webhookPayloadSchema } from "@/lib/schemas";
+import { webhookPayloadSchema, type WebhookPayload } from "@/lib/schemas";
 import { logError, logInfo } from "@/lib/logger";
 
 const http = httpRouter();
@@ -114,9 +114,10 @@ http.route({
       return new Response("Invalid payload format", { status: 400 });
     }
     
-    const payload = validationResult.data;
+    const payload: WebhookPayload = validationResult.data;
     // Debug shape (no PII): helps diagnose blank fields from providers
     try {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
       const shape = {
         hasData: typeof (payload as any)?.data === 'object',
         hasEmail: typeof (payload as any)?.email === 'object',
@@ -126,6 +127,7 @@ http.route({
         hasCleanedContent: typeof (payload as any)?.email?.cleanedContent === 'object',
         keys: Object.keys(payload as Record<string, unknown>),
       }
+      /* eslint-enable @typescript-eslint/no-explicit-any */
       logInfo("Webhook payload shape", { action: "webhook_inbound_shape", metadata: shape })
     } catch {}
     

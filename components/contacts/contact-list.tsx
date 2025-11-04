@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import type { Id } from "@/convex/_generated/dataModel"
@@ -35,19 +36,30 @@ export function ContactList({
     return firstChar ? firstChar.toUpperCase() : "?"
   }
 
-  const formatLastContacted = (timestamp?: number) => {
-    if (!timestamp) return null
-    const date = new Date(timestamp)
+  const lastContactedTimes = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now()
-    const diffMs = now - timestamp
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    return contacts.reduce((acc, contact) => {
+      if (!contact.lastContactedAt) {
+        acc[contact._id] = null
+        return acc
+      }
 
-    if (diffDays === 0) return "Today"
-    if (diffDays === 1) return "Yesterday"
-    if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    return date.toLocaleDateString()
-  }
+      const date = new Date(contact.lastContactedAt)
+      const diffMs = now - contact.lastContactedAt
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+      let formatted: string
+      if (diffDays === 0) formatted = "Today"
+      else if (diffDays === 1) formatted = "Yesterday"
+      else if (diffDays < 7) formatted = `${diffDays} days ago`
+      else if (diffDays < 30) formatted = `${Math.floor(diffDays / 7)} weeks ago`
+      else formatted = date.toLocaleDateString()
+
+      acc[contact._id] = formatted
+      return acc
+    }, {} as Record<string, string | null>)
+  }, [contacts])
 
   if (contacts.length === 0) {
     return (
@@ -91,9 +103,9 @@ export function ContactList({
                   {contact.primaryEmail}
                 </p>
               )}
-              {contact.lastContactedAt && (
+              {lastContactedTimes[contact._id] && (
                 <p className="text-xs text-muted-foreground">
-                  {formatLastContacted(contact.lastContactedAt)}
+                  {lastContactedTimes[contact._id]}
                 </p>
               )}
             </div>

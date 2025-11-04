@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
@@ -154,7 +155,7 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
           <div className="flex items-start gap-4 mb-6">
             <Avatar className="h-16 w-16">
               {contact.avatarUrl ? (
-                <img src={contact.avatarUrl} alt={contact.name || contact.primaryEmail} />
+                <Image src={contact.avatarUrl} alt={contact.name || contact.primaryEmail} width={64} height={64} />
               ) : (
                 <AvatarFallback className="bg-primary text-primary-foreground text-lg">
                   {getInitials(contact)}

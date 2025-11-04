@@ -15,10 +15,7 @@ export default function ComposePage() {
   const { openNew, openDraft } = useCompose()
   const hasOpenedRef = useRef(false)
 
-  const draftDoc = useQuery(
-    draftId ? api.emails.getById : undefined,
-    draftId ? { id: draftId as Id<"emails"> } : undefined
-  )
+  const draftDoc = useQuery(api.emails.getById, draftId ? { id: draftId as Id<"emails"> } : "skip")
 
   const draftEmail = useMemo<Email | null>(() => {
     if (!draftDoc) return null
