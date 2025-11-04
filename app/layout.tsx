@@ -8,6 +8,8 @@ import { Toaster } from '@/components/ui/sonner'
 import { ComposeProvider } from '@/app/providers/compose-provider'
 import { ComposeDockWrapper } from '@/components/compose-dock-wrapper'
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
+import { NewMailSound } from '@/components/new-mail-sound'
+import { SentMailSound } from '@/components/sent-mail-sound'
 
 export const metadata: Metadata = {
   title: 'Blank Inbox',
@@ -35,6 +37,8 @@ export default function RootLayout({
                 {children}
                 <ComposeDockWrapper />
                 <Toaster />
+                <NewMailSound />
+                <SentMailSound />
               </ComposeProvider>
             </ConvexClientProvider>
           </ThemeProvider>

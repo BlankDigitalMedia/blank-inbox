@@ -330,3 +330,4 @@ export function ContactDetail({ contact, onBack }: ContactDetailProps) {
   )
 }
 
+

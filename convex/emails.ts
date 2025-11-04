@@ -218,43 +218,104 @@ export const upsertFromInbound = internalMutation({
     payload: v.any(),
   },
   handler: async (ctx, { payload }) => {
-    // Parse from nested data if it exists (Resend nests data)
-    const data = payload?.data || payload
+    // Parse provider payloads (support multiple wrappers):
+    // - Resend: payload.data
+    // - inbound.new (nested): payload.email
+    // - Some providers: payload.payload or payload.payload.email
+    // - Legacy/flat: payload
+    const data = payload?.data 
+      || payload?.email 
+      || payload?.payload?.email 
+      || payload?.payload 
+      || payload
+
+    // Helper: normalize recipient lists across shapes
+    const toCsv = (input: unknown): string => {
+      if (!input) return ""
+      if (typeof input === "string") return input
+      if (Array.isArray(input)) {
+        return input
+          .map((v) => {
+            if (!v) return ""
+            if (typeof v === "string") return v
+            if (typeof v === "object") {
+              const obj = v as Record<string, unknown>
+              // Common shapes: { text }, { address }, Gmail-like { value: [{ address }] }
+              if (typeof obj.text === "string") return obj.text
+              if (typeof obj.address === "string") return obj.address
+              if (Array.isArray(obj.value)) {
+                return (obj.value as Array<{ address?: string; name?: string }>)
+                  .map((it) => it?.address || "")
+                  .filter(Boolean)
+                  .join(", ")
+              }
+            }
+            return ""
+          })
+          .filter(Boolean)
+          .join(", ")
+      }
+      if (typeof input === "object") {
+        const obj = input as Record<string, unknown>
+        if (typeof obj.text === "string") return obj.text
+        if (typeof obj.address === "string") return obj.address
+        if (Array.isArray(obj.value)) {
+          return (obj.value as Array<{ address?: string; name?: string }>)
+            .map((it) => it?.address || "")
+            .filter(Boolean)
+            .join(", ")
+        }
+      }
+      return ""
+    }
 
     // Extract email data from webhook payload
-    const from = data?.envelope?.from || data?.from || ""
+    // Support string or object shapes (e.g., inbound.new { from: { text } })
+    const fromObj = typeof data?.from === "object" && data?.from !== null ? data.from : undefined
+    const from = data?.envelope?.from 
+      || (typeof data?.from === "string" ? data.from : fromObj?.text || fromObj?.address)
+      || ""
     
     // Handle arrays for to/cc/bcc - join with ", " to create CSV strings
-    const to = Array.isArray(data?.to) 
-      ? data.to.join(", ")
-      : data?.envelope?.to || data?.to || ""
+    const toVal = data?.to
+    const to = data?.envelope?.to || toCsv(toVal)
     
-    const cc = Array.isArray(data?.cc) && data.cc.length > 0
-      ? data.cc.join(", ")
-      : undefined
+    const ccRaw = data?.cc
+    const ccCsv = toCsv(ccRaw)
+    const cc = ccCsv.length > 0 ? ccCsv : undefined
     
-    const bcc = Array.isArray(data?.bcc) && data.bcc.length > 0
-      ? data.bcc.join(", ")
-      : undefined
+    const bccRaw = data?.bcc
+    const bccCsv = toCsv(bccRaw)
+    const bcc = bccCsv.length > 0 ? bccCsv : undefined
     
-    const subject = data?.subject || ""
+    // Subject from field or headers fallback
+    // Normalize headers to lowercase for case-insensitive access
+    const headersRaw = (data?.headers || {}) as Record<string, string | string[]>
+    const headers = Object.fromEntries(
+      Object.entries(headersRaw).map(([k, v]) => [k.toLowerCase(), v])
+    ) as Record<string, string | string[]>
+
+    const subject = data?.subject || (headers["subject"] as string | undefined) || ""
     
-    // Parse headers for threading
-    const headers = (data?.headers || {}) as Record<string, string | string[]>
+    // Helper for header access
     const getHeader = (key: string): string | undefined => {
-      const val = headers[key] || headers[key.toLowerCase()]
+      const val = headers[key.toLowerCase()]
       return Array.isArray(val) ? val[0] : val
     }
     
     const messageId = normalizeMessageId(
-      getHeader("message-id") || data?.message_id || data?.id
+      getHeader("message-id")
+        || getHeader("messageid")
+        || data?.message_id
+        || data?.messageId
+        || data?.id
     ) || ""
     
     const inReplyTo = normalizeMessageId(
-      getHeader("in-reply-to") || data?.in_reply_to
+      getHeader("in-reply-to") || data?.in_reply_to || data?.inReplyTo
     )
     
-    const replyTo = getHeader("reply-to") || data?.reply_to
+    const replyTo = getHeader("reply-to") || data?.reply_to || (typeof data?.replyTo === "string" ? data.replyTo : undefined)
     
     // Parse references header (can be space-separated string or array)
     const referencesRaw = getHeader("references") || data?.references
@@ -283,10 +344,22 @@ export const upsertFromInbound = internalMutation({
     // Set receivedAt from created_at or date field if present
     const receivedAt = data?.created_at 
       ? new Date(data.created_at).getTime()
-      : (data?.date ? new Date(data.date).getTime() : Date.now())
+      : (data?.date ? new Date(data.date).getTime()
+        : (data?.receivedAt ? new Date(data.receivedAt).getTime()
+          : (getHeader("date") ? new Date(getHeader("date") as string).getTime() : Date.now())))
 
     // Extract body from payload if available (html or text)
-    const body = data?.html || data?.text || ""
+    // Support inbound.new cleanedContent { html, text }
+    const cleaned = typeof data?.cleanedContent === "object" && data.cleanedContent ? data.cleanedContent as { html?: string; text?: string } : undefined
+    const altCleanHtml = (data?.clean_html as string | undefined) || (data?.cleanHtml as string | undefined)
+    const altCleanText = (data?.clean_text as string | undefined) || (data?.cleanText as string | undefined)
+    const body = data?.html || data?.text || cleaned?.html || cleaned?.text || altCleanHtml || altCleanText || ""
+
+    // Fallback: derive from header fields if top-level empty
+    const headerFrom = getHeader("from")
+    const headerTo = getHeader("to")
+    const computedFrom = from || headerFrom || ""
+    const computedTo = to || headerTo || ""
     
     // Create a preview from text, body, or subject
     const previewText = data?.text || body || subject
@@ -302,8 +375,8 @@ export const upsertFromInbound = internalMutation({
       if (existing) {
         // Update the existing record instead of inserting
         await ctx.db.patch(existing._id, {
-          from,
-          to,
+          from: computedFrom,
+          to: computedTo,
           cc,
           bcc,
           subject,
@@ -322,8 +395,8 @@ export const upsertFromInbound = internalMutation({
 
     // Insert the email record
     const docId = await ctx.db.insert("emails", {
-      from,
-      to,
+      from: computedFrom,
+      to: computedTo,
       cc,
       bcc,
       subject,
@@ -368,8 +441,8 @@ export const upsertFromInbound = internalMutation({
     }
 
     // Process 'from' field
-    if (from) {
-      const fromNormalized = normalizeEmail(from)
+    if (computedFrom) {
+      const fromNormalized = normalizeEmail(computedFrom)
       const name = extractNameFromEmailString(from)
       await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
         email: fromNormalized,
@@ -382,8 +455,8 @@ export const upsertFromInbound = internalMutation({
     }
 
     // Process 'to' field
-    if (to) {
-      const toEmails = extractEmailsFromString(to)
+    if (computedTo) {
+      const toEmails = extractEmailsFromString(computedTo)
       for (const addr of toEmails) {
         await ctx.scheduler.runAfter(0, internal.contacts.upsertContactFromEmail, {
           email: addr,
@@ -903,7 +976,11 @@ export const sendEmail = action({
       text,
       messageId,
       originalEmailId,
-      originalEmail,
+      originalEmail: originalEmail ? {
+        messageId: originalEmail.messageId,
+        threadId: originalEmail.threadId,
+        references: originalEmail.references,
+      } : null,
     })
 
     // If this was from a draft, delete the draft

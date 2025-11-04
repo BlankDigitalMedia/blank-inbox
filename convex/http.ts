@@ -115,16 +115,43 @@ http.route({
     }
     
     const payload = validationResult.data;
+    // Debug shape (no PII): helps diagnose blank fields from providers
+    try {
+      const shape = {
+        hasData: typeof (payload as any)?.data === 'object',
+        hasEmail: typeof (payload as any)?.email === 'object',
+        hasHeaders: typeof ((payload as any)?.data?.headers || (payload as any)?.email?.headers || (payload as any)?.headers) === 'object',
+        hasHtml: !!((payload as any)?.data?.html || (payload as any)?.email?.html || (payload as any)?.html),
+        hasText: !!((payload as any)?.data?.text || (payload as any)?.email?.text || (payload as any)?.text),
+        hasCleanedContent: typeof (payload as any)?.email?.cleanedContent === 'object',
+        keys: Object.keys(payload as Record<string, unknown>),
+      }
+      logInfo("Webhook payload shape", { action: "webhook_inbound_shape", metadata: shape })
+    } catch {}
     
     const docId = await ctx.runMutation(internal.emails.upsertFromInbound, { payload });
     
-    // Handle both Resend format (nested data) and inbound.new format (flat)
-    const emailId = ('data' in payload && payload.data?.email_id) || ('email_id' in payload && payload.email_id);
-    const data = ('data' in payload && payload.data) || payload;
+    // Handle both Resend format (nested data) and inbound.new/flat format
+    const isObj = (val: unknown): val is Record<string, unknown> => typeof val === 'object' && val !== null;
+    const getStr = (obj: Record<string, unknown> | undefined, key: string): string | undefined => {
+      if (!obj) return undefined;
+      const val = obj[key];
+      return typeof val === 'string' ? val : undefined;
+    };
+
+    const root: Record<string, unknown> = isObj(payload) ? payload : {};
+    const nested: Record<string, unknown> | undefined = isObj(root['data']) ? (root['data'] as Record<string, unknown>) : undefined;
+    const isResendPayload = !!nested;
+    const emailId = isResendPayload ? getStr(nested, 'email_id') : getStr(root, 'email_id');
+    const data: Record<string, unknown> = (isResendPayload ? nested : root) || {};
     
-    const hasBody = ('html' in data && data?.html) || ('text' in data && data?.text);
+    const hasBody = !!(getStr(data, 'html') || getStr(data, 'text'));
     
-    if (emailId && docId && !hasBody) {
+    // Only fetch from Resend API if:
+    // 1. This is a Resend payload (has 'data' property)
+    // 2. We have an emailId and docId
+    // 3. The body is missing
+    if (isResendPayload && emailId && docId && !hasBody) {
       await ctx.scheduler.runAfter(0, internal.emails.fetchEmailBodyFromResend, {
         docId,
         emailId,
@@ -136,7 +163,11 @@ http.route({
       ip: clientIp,
       action: "webhook_inbound",
       emailId: String(docId),
-      metadata: { hasBody, scheduledFetch: !!emailId && !!docId && !hasBody },
+      metadata: { 
+        hasBody, 
+        isResendPayload,
+        scheduledFetch: isResendPayload && !!emailId && !!docId && !hasBody 
+      },
     });
     
     return new Response("ok", { status: 200 });

@@ -14,6 +14,7 @@
   - Proxy.ts replaces middleware.ts for route protection
   - All pages are client components using Convex hooks (no server components with async request APIs)
 - **Backend**: Convex (serverless functions + database)
+  - Convex TypeScript configuration (`convex/tsconfig.json`) includes path aliases (`@/*` → `../*`) to resolve shared lib imports from parent directory
 - **UI**: shadcn/ui components with Radix UI primitives + Tailwind CSS + Sonner for toast notifications + next-themes for dark/light mode
 - **Authentication**: Convex Auth with password-based authentication, single-user restriction (only first signup allowed), optional admin email restriction
   - Route protection via `proxy.ts` (Next.js 16+ convention, migrated from middleware.ts)
@@ -60,7 +61,7 @@
   - Reply all to emails functionality with smart sender selection
   - Forward emails functionality with quoted original message
   - Contact management from sent email history (extracts and splits comma-separated recipients from to/cc fields)
-  - Contacts management: auto-create contacts from email interactions, manual edit with name/company/title/notes/tags, contact list page with search, contact detail view with activity metrics
+  - Contacts management: auto-create contacts from email interactions, manual creation via "New Contact" dialog with email/name/company/title/notes/tags, manual edit with name/company/title/notes/tags, contact list page with search, contact detail view with activity metrics
   - Dark/light theme toggle
   - Toast notifications for user feedback (success/error messages)
   - Search input placeholder in sidebar (functionality not yet implemented)
@@ -89,7 +90,7 @@
 - **Linting**: ESLint with Next.js core-web-vitals + TypeScript rules + jsx-a11y for accessibility
 - **Naming**: camelCase for variables/functions, PascalCase for components
 - **Error Handling**: Standard try/catch, no custom error boundaries yet
-- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components with full draft management (save, load, delete)
+- **Architecture**: Single shared components for email views (e.g., `MailSidebar`, `EmailPage`, `EmailList`, `EmailDetail`, `Composer`) over view-specific duplicates; drafts use separate `DraftList` and `DraftDetail` components with full draft management (save, load, delete); contacts use shared `ContactList`, `ContactDetail`, and `NewContactDialog` components
 
 ## Security Hardening
 - **Next.js Security Headers** (next.config.ts): X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, Permissions-Policy restrictions, CSP and HSTS configured

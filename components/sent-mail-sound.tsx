@@ -1,0 +1,51 @@
+"use client"
+
+import { useEffect, useRef } from "react"
+import { useQuery } from "convex/react"
+import { api } from "@/convex/_generated/api"
+import { usePathname } from "next/navigation"
+
+function SentMailSoundInner() {
+  const sentEmails = useQuery(api.emails.listSent)
+  const prevCountRef = useRef<number | undefined>(undefined)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Initialize audio once
+  useEffect(() => {
+    const audio = new Audio("/sounds/cowabunga.mp3")
+    audio.preload = "auto"
+    audioRef.current = audio
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ""
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  // Play when sent email count increases (skip first load)
+  useEffect(() => {
+    if (!Array.isArray(sentEmails)) return
+    const currentCount = sentEmails.length
+    const prev = prevCountRef.current
+    prevCountRef.current = currentCount
+    if (prev === undefined) return
+    if (currentCount > prev) {
+      const a = audioRef.current
+      if (a) {
+        a.currentTime = 0
+        a.play().catch(() => {})
+      }
+    }
+  }, [sentEmails])
+
+  return null
+}
+
+export function SentMailSound() {
+  const pathname = usePathname()
+  if (pathname === "/signin") return null
+  return <SentMailSoundInner />
+}
+

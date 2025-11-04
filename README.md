@@ -76,6 +76,9 @@ NEXT_INBOUND_API_KEY=sk_your_inbound_api_key
 npx convex env set RESEND_API_KEY re_your_resend_api_key
 npx convex env set NEXT_INBOUND_API_KEY sk_your_inbound_api_key
 
+# Required: Set webhook secret for security
+npx convex env set INBOUND_WEBHOOK_SECRET $(openssl rand -hex 32)
+
 # Optional: Set ADMIN_EMAIL in Convex
 npx convex env set ADMIN_EMAIL your-email@example.com
 ```
@@ -107,11 +110,13 @@ To receive emails, configure your provider's webhook:
 1. Go to [Resend Dashboard → Webhooks](https://resend.com/webhooks)
 2. Add webhook URL: `https://your-convex-deployment.convex.cloud/inbound`
 3. Subscribe to `email.received` events
+4. Add custom header: `X-Webhook-Secret` = (your `INBOUND_WEBHOOK_SECRET` value)
 
 **For inbound.new:**
 1. Go to [inbound.new Dashboard](https://inbound.new/dashboard)
 2. Set webhook URL: `https://your-convex-deployment.convex.cloud/inbound`
-3. Configure your inbound email address
+3. Add custom header: `X-Webhook-Secret` = (your `INBOUND_WEBHOOK_SECRET` value)
+4. Configure your inbound email address
 
 ---
 

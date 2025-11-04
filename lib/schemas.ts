@@ -40,7 +40,7 @@ export const resendWebhookSchema = z.object({
     references: z.union([z.string(), z.array(z.string())]).optional(),
     date: z.string().optional(),
   }),
-})
+}).passthrough()
 
 // inbound.new webhook payload format
 export const inboundWebhookSchema = z.object({
@@ -64,11 +64,43 @@ export const inboundWebhookSchema = z.object({
   references: z.union([z.string(), z.array(z.string())]).optional(),
   created_at: z.string().optional(),
   date: z.string().optional(),
-})
+}).passthrough()
+
+// inbound.new nested payload format (email + cleanedContent)
+export const inboundNestedWebhookSchema = z.object({
+  email: z.object({
+    from: z.union([
+      z.string(),
+      z.object({ text: z.string().optional(), address: z.string().optional() })
+    ]).optional(),
+    to: z.union([
+      z.string(),
+      z.array(z.string()),
+      z.object({ text: z.string().optional() })
+    ]).optional(),
+    cc: z.union([
+      z.string(),
+      z.array(z.string())
+    ]).optional(),
+    bcc: z.union([
+      z.string(),
+      z.array(z.string())
+    ]).optional(),
+    subject: z.string().optional(),
+    cleanedContent: z.object({
+      html: z.string().optional(),
+      text: z.string().optional(),
+    }).optional(),
+    headers: emailHeadersSchema.optional(),
+    messageId: z.string().optional(),
+    receivedAt: z.string().optional(),
+  })
+}).passthrough()
 
 // Union type for webhook payloads (handles both formats)
 export const webhookPayloadSchema = z.union([
   resendWebhookSchema,
+  inboundNestedWebhookSchema,
   inboundWebhookSchema,
 ])
 
@@ -112,7 +144,7 @@ export const storeSentEmailSchema = z.object({
     messageId: z.string().optional(),
     threadId: z.string().optional(),
     references: z.array(z.string()).optional(),
-  }).optional(),
+  }).nullish(),
 })
 
 // Email ID parameter schema
