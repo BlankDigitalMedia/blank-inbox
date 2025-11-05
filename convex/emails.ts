@@ -216,19 +216,26 @@ export const getById = query({
 
 // Helper to normalize email (lowercase, trim)
 const normalizeEmail = (email: string): string => {
-  return email.trim().toLowerCase()
+  const trimmed = email.trim()
+  const angleMatch = trimmed.match(/<([^>]+)>/)
+  const extracted = angleMatch ? angleMatch[1] : trimmed.replace(/^"+|"+$/g, "")
+  return extracted.trim().toLowerCase()
 }
 
 // Helper to extract all email addresses from a comma-separated string
 const extractEmailsFromString = (emailString: string): string[] => {
   if (!emailString) return []
-  return emailString
-    .split(",")
-    .map((addr) => {
-      const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
-      return normalizeEmail(match[1] || addr.trim())
-    })
-    .filter((email) => email.length > 0)
+  return Array.from(
+    new Set(
+      emailString
+        .split(",")
+        .map((addr) => {
+          const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
+          return normalizeEmail(match[1] || addr.trim())
+        })
+        .filter((email) => email.length > 0)
+    )
+  )
 }
 
 export const getContactEmails = query({
@@ -252,7 +259,6 @@ export const getContactEmails = query({
     if (contact.emails) {
       contact.emails.forEach((email) => contactEmails.add(normalizeEmail(email)));
     }
-    const contactEmailSet = Array.from(contactEmails);
     
     // Use paginate() for cursor-based pagination
     const result = await ctx.db
@@ -269,7 +275,7 @@ export const getContactEmails = query({
       // Check from field
       if (email.from) {
         const fromNormalized = normalizeEmail(email.from);
-        if (contactEmailSet.includes(fromNormalized)) {
+        if (contactEmails.has(fromNormalized)) {
           return true;
         }
       }
@@ -277,7 +283,7 @@ export const getContactEmails = query({
       // Check to field
       if (email.to) {
         const toEmails = extractEmailsFromString(email.to);
-        if (toEmails.some((addr) => contactEmailSet.includes(addr))) {
+        if (toEmails.some((addr) => contactEmails.has(addr))) {
           return true;
         }
       }
@@ -285,7 +291,7 @@ export const getContactEmails = query({
       // Check cc field
       if (email.cc) {
         const ccEmails = extractEmailsFromString(email.cc);
-        if (ccEmails.some((addr) => contactEmailSet.includes(addr))) {
+        if (ccEmails.some((addr) => contactEmails.has(addr))) {
           return true;
         }
       }
@@ -293,7 +299,7 @@ export const getContactEmails = query({
       // Check bcc field
       if (email.bcc) {
         const bccEmails = extractEmailsFromString(email.bcc);
-        if (bccEmails.some((addr) => contactEmailSet.includes(addr))) {
+        if (bccEmails.some((addr) => contactEmails.has(addr))) {
           return true;
         }
       }

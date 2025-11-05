@@ -8,12 +8,13 @@ import type { Doc } from "@/convex/_generated/dataModel"
 import { InfiniteScroll } from "@/components/ui/infinite-scroll"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Mail, Send, ArrowRight } from "lucide-react"
-import { cn, stripHtml } from "@/lib/utils"
+import { cn, stripHtml, extractEmailAddress, normalizeEmail } from "@/lib/utils"
 import { format, isToday, isYesterday } from "date-fns"
 
 interface ContactEventsTimelineProps {
   contactId: Id<"contacts">
   contactEmail: string
+  contactEmails?: string[]
   onEmailClick?: (emailId: Id<"emails">) => void
 }
 
@@ -48,38 +49,99 @@ function groupEmailsByDate(emails: EmailDoc[]): Map<string, EmailDoc[]> {
   return groups
 }
 
-function getEmailDirection(email: EmailDoc, contactEmail: string): "sent" | "received" {
-  const normalizedContact = contactEmail.toLowerCase().trim()
-  const normalizedFrom = email.from?.toLowerCase().trim() || ""
-  
-  // Check if email is sent (contact is the sender)
-  if (normalizedFrom === normalizedContact) {
-    return "sent"
-  }
-  
-  // Otherwise it's received
-  return "received"
+type AddressInfo = {
+  email: string
+  name?: string
 }
 
-function extractEmailFromField(field: string | undefined): string {
-  if (!field) return ""
-  const match = field.match(/<([^>]+)>/)
-  return match ? match[1] : field.trim()
+function parseAddress(value?: string): AddressInfo | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const angleMatch = trimmed.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>/)
+  if (angleMatch) {
+    const rawName = angleMatch[1]?.trim()
+    const email = extractEmailAddress(angleMatch[2] || "")
+    if (!email) return null
+    const name = rawName && rawName.length > 0 ? rawName : undefined
+    return {
+      email,
+      name,
+    }
+  }
+
+  const email = extractEmailAddress(trimmed)
+  if (!email) return null
+  return {
+    email,
+  }
+}
+
+function parseAddressList(value?: string): AddressInfo[] {
+  if (!value) return []
+  return value
+    .split(",")
+    .map((segment) => parseAddress(segment))
+    .filter((info): info is AddressInfo => Boolean(info?.email))
+}
+
+function findMatchingRecipient(email: EmailDoc, contactEmails: Set<string>): AddressInfo | null {
+  const fields = [email.to, email.cc, email.bcc]
+  for (const field of fields) {
+    const addresses = parseAddressList(field)
+    for (const address of addresses) {
+      if (contactEmails.has(normalizeEmail(address.email))) {
+        return address
+      }
+    }
+  }
+  return null
+}
+
+function getEmailDirection(email: EmailDoc, contactEmails: Set<string>): "sent" | "received" {
+  if (email.sent) {
+    return "sent"
+  }
+  const sender = parseAddress(email.from)
+  if (sender && contactEmails.has(normalizeEmail(sender.email))) {
+    return "received"
+  }
+  return "sent"
+}
+
+function getDisplayParts(info: AddressInfo | null): { label: string; subLabel?: string } {
+  if (!info) {
+    return { label: "Unknown" }
+  }
+  const label = info.name && info.name.length > 0 ? info.name : info.email
+  const subLabel = info.name && info.name.length > 0 ? info.email : undefined
+  return { label, subLabel }
 }
 
 export function ContactEventsTimeline({
   contactId,
   contactEmail,
+  contactEmails,
   onEmailClick,
 }: ContactEventsTimelineProps) {
   const [cursor, setCursor] = useState<string | undefined>(undefined)
   const [allEmails, setAllEmails] = useState<EmailDoc[]>([])
 
-  // Reset state when contactId changes
-  useEffect(() => {
-    setCursor(undefined)
-    setAllEmails([])
-  }, [contactId])
+  const normalizedContactEmails = useMemo(() => {
+    const set = new Set<string>()
+    if (contactEmail) {
+      set.add(normalizeEmail(contactEmail))
+    }
+    if (contactEmails) {
+      contactEmails.forEach((email) => {
+        if (email) {
+          set.add(normalizeEmail(email))
+        }
+      })
+    }
+    return set
+  }, [contactEmail, contactEmails])
 
   const result = useQuery(api.emails.getContactEmails, {
     contactId,
@@ -186,7 +248,13 @@ export function ContactEventsTimeline({
         const prevItem = index > 0 ? flatEmails[index - 1] : null
         const showDateHeader = !prevItem || prevItem.dateKey !== dateKey
         
-        const direction = getEmailDirection(email, contactEmail)
+        const direction = getEmailDirection(email, normalizedContactEmails)
+
+        const senderInfo = parseAddress(email.from)
+        const recipientInfo = findMatchingRecipient(email, normalizedContactEmails)
+        const fallbackContact = parseAddress(contactEmail)
+        const participant = direction === "received" ? senderInfo : recipientInfo || fallbackContact
+        const { label: participantLabel, subLabel: participantSubLabel } = getDisplayParts(participant)
 
         return (
           <div key={email._id}>
@@ -228,14 +296,19 @@ export function ContactEventsTimeline({
                     <span className="text-xs font-medium text-muted-foreground capitalize">
                       {direction}
                     </span>
-                    {direction === "sent" && email.to && (
-                      <>
+                    <div className="flex items-center gap-1 min-w-0">
+                      {direction === "sent" && (
                         <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                        <span className="text-xs text-muted-foreground truncate">
-                          {extractEmailFromField(email.to)}
-                        </span>
-                      </>
-                    )}
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-muted-foreground truncate">{participantLabel}</p>
+                        {participantSubLabel && (
+                          <p className="text-[11px] text-muted-foreground/80 truncate">
+                            {participantSubLabel}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {formatEventTime(email.receivedAt)}

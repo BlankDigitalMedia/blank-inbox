@@ -264,7 +264,52 @@ This document outlines the manual test plan for the Blank Inbox authentication a
 
 ---
 
-### 12. Security Headers Tests
+### 13. Contact Enrichment Tests
+
+**Objective:** Verify AI-powered contact enrichment works correctly.
+
+**Prerequisites:**
+- `FIRECRAWL_API_KEY` set in environment
+- `OPENAI_API_KEY` set in environment
+- At least one contact with a company email address (not personal email like gmail.com)
+
+**Steps:**
+1. Sign in as authenticated user
+2. Navigate to `/contacts`
+3. Select a contact with a company email (e.g., `john@acme.com`)
+4. Click "Enrich" button in contact detail view
+5. Wait for enrichment to complete (may take 30-60 seconds)
+6. Verify enrichment results appear grouped by:
+   - **Company** section (companyName, website, industry, headquarters, yearFounded, employeeCount, description, fundingStage, totalRaised, investors, techStack)
+   - **Person** section (titleNormalized, seniority, department, linkedinUrl, location)
+   - **Other** section (any custom fields)
+7. Verify each enrichment field shows:
+   - Field name (human-readable)
+   - Field value
+   - Confidence percentage badge
+   - Source link (if available)
+8. Test "Apply Suggestions" button:
+   - If contact has empty `company` or `title` fields
+   - Click "Apply Suggestions"
+   - Verify company/title are updated from enrichment data
+
+**Edge Cases:**
+- Test with personal email (gmail.com, yahoo.com): Should skip enrichment
+- Test with invalid email: Should handle gracefully
+- Test rate limiting: Make multiple enrichment requests rapidly
+
+**Expected Results:**
+- ✅ Enrichment button shows loading state
+- ✅ Results appear grouped by Company/Person/Other
+- ✅ Confidence scores are displayed (0-100%)
+- ✅ Source links are clickable and open in new tab
+- ✅ "Apply Suggestions" updates empty fields
+- ✅ Personal emails are skipped with appropriate message
+- ✅ Rate limiting prevents abuse (50 requests/hour per IP)
+
+---
+
+### 14. Security Headers Tests
 
 **Objective:** Verify security headers are present on all routes.
 
@@ -289,7 +334,7 @@ curl -I http://localhost:3000/
 
 ---
 
-### 13. Accessibility Tests
+### 14. Accessibility Tests
 
 **Objective:** Verify accessibility features work correctly.
 
@@ -341,6 +386,9 @@ After completing tests, document results:
 | 8 | Session Persistence | ✅ Pass | |
 | 9 | Multi-Tab Behavior | ⚠️ Warn | Minor delay in tab sync |
 | 10 | Email Webhook | ✅ Pass | |
+| 11 | Webhook Security | ✅ Pass | |
+| 12 | Security Headers | ✅ Pass | |
+| 13 | Contact Enrichment | ✅ Pass | |
 
 **Issues Found:** [List any bugs or unexpected behavior]
 **Recommendations:** [Suggestions for improvements]

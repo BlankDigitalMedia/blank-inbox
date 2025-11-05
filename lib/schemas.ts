@@ -196,8 +196,6 @@ export const updateContactSchema = z.object({
 export const listContactsSchema = z.object({
   search: z.string().max(500).optional(),
   tag: z.string().max(100).optional(),
-  cursor: z.string().optional(),
-  limit: z.number().min(1).max(100).default(100),
 })
 
 export const getContactByEmailSchema = z.object({
@@ -223,6 +221,22 @@ export const getContactEmailsSchema = z.object({
   cursor: z.string().optional(),
 })
 
+export const updateEnrichmentSchema = z.object({
+  contactId: z.custom<Id<"contacts">>(),
+  enrichments: z.record(z.object({
+    field: z.string(),
+    value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+    confidence: z.number(),
+    source: z.string().optional(),
+    sourceContext: z.array(z.object({
+      url: z.string(),
+      snippet: z.string(),
+    })).optional(),
+  })),
+  status: z.enum(['pending', 'processing', 'completed', 'error', 'skipped']),
+  error: z.string().optional(),
+})
+
 export type ContactIdInput = z.infer<typeof contactIdSchema>
 export type UpsertContactInput = z.infer<typeof upsertContactSchema>
 export type UpdateContactInput = z.infer<typeof updateContactSchema>
@@ -232,3 +246,4 @@ export type MergeContactsInput = z.infer<typeof mergeContactsSchema>
 export type TouchLastContactedInput = z.infer<typeof touchLastContactedSchema>
 export type DeleteContactInput = z.infer<typeof deleteContactSchema>
 export type GetContactEmailsInput = z.infer<typeof getContactEmailsSchema>
+export type UpdateEnrichmentInput = z.infer<typeof updateEnrichmentSchema>

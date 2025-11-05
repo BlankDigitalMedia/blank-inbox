@@ -1,4 +1,5 @@
 import { query, mutation, action, internalMutation } from "./_generated/server"
+import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
 import type { Id, Doc } from "./_generated/dataModel"
@@ -12,11 +13,15 @@ import {
   mergeContactsSchema,
   touchLastContactedSchema,
   deleteContactSchema,
+  updateEnrichmentSchema,
 } from "@/lib/schemas"
 
 // Helper to normalize email (lowercase, trim)
 const normalizeEmail = (email: string): string => {
-  return email.trim().toLowerCase()
+  const trimmed = email.trim()
+  const angleMatch = trimmed.match(/<([^>]+)>/)
+  const extracted = angleMatch ? angleMatch[1] : trimmed.replace(/^"+|"+$/g, "")
+  return extracted.trim().toLowerCase()
 }
 
 // Helper to extract name from email string (e.g., "John Doe <john@example.com>" -> "John Doe")
@@ -30,13 +35,17 @@ const extractNameFromEmailString = (emailString: string): string | undefined => 
 
 // Helper to extract all email addresses from a comma-separated string
 const extractEmailsFromString = (emailString: string): string[] => {
-  return emailString
-    .split(",")
-    .map((addr) => {
-      const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
-      return normalizeEmail(match[1] || addr.trim())
-    })
-    .filter((email) => email.length > 0)
+  return Array.from(
+    new Set(
+      emailString
+        .split(",")
+        .map((addr) => {
+          const match = addr.match(/<([^>]+)>/) || [null, addr.trim()]
+          return normalizeEmail(match[1] || addr.trim())
+        })
+        .filter((email) => email.length > 0)
+    )
+  )
 }
 
 // Helper to find a contact by any email (primaryEmail or emails array)
@@ -55,7 +64,7 @@ async function findContactByAnyEmail(
   // Check emails array (scan required, but necessary for deduplication)
   const allContacts = await ctx.db.query("contacts").collect()
   return (
-    allContacts.find((c: Doc<"contacts">) => c.emails?.includes(normalizedEmail)) || null
+    allContacts.find((c: Doc<"contacts">) => c.emails?.some((email) => normalizeEmail(email) === normalizedEmail) || normalizeEmail(c.primaryEmail) === normalizedEmail) || null
   )
 }
 
@@ -63,38 +72,86 @@ export const listContacts = query({
   args: {
     search: v.optional(v.string()),
     tag: v.optional(v.string()),
-    cursor: v.optional(v.string()),
-    limit: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     await requireUserId(ctx)
-    const { search, tag, limit } = listContactsSchema.parse(args)
-    
-    let contacts = await ctx.db
+    const { search, tag } = listContactsSchema.parse({ search: args.search, tag: args.tag })
+
+    const baseQuery = ctx.db
       .query("contacts")
       .withIndex("by_updatedAt")
       .order("desc")
-      .take(limit ?? 100)
 
-    // Filter by search term (name or email)
-    if (search) {
-      const searchLower = search.toLowerCase()
-      contacts = contacts.filter((contact) => {
+    const filterContact = (contact: Doc<"contacts">) => {
+      if (tag && !contact.tags?.includes(tag)) {
+        return false
+      }
+
+      if (search) {
+        const searchLower = search.toLowerCase()
         const nameMatch = contact.name?.toLowerCase().includes(searchLower)
-        const emailMatch = contact.primaryEmail.toLowerCase().includes(searchLower)
-        const otherEmailsMatch = contact.emails?.some((email) =>
-          email.toLowerCase().includes(searchLower)
-        )
-        return nameMatch || emailMatch || otherEmailsMatch
+        const primaryEmail = contact.primaryEmail
+        const primaryMatches =
+          primaryEmail.toLowerCase().includes(searchLower) ||
+          normalizeEmail(primaryEmail).includes(searchLower)
+        const otherEmailsMatch = contact.emails?.some((email) => {
+          const normalized = normalizeEmail(email)
+          return (
+            normalized.includes(searchLower) ||
+            email.toLowerCase().includes(searchLower)
+          )
+        })
+        return Boolean(nameMatch || primaryMatches || otherEmailsMatch)
+      }
+
+      return true
+    }
+
+    const desired = args.paginationOpts.numItems ?? 50
+    let cursor = args.paginationOpts.cursor ?? null
+    let accumulated: Doc<"contacts">[] = []
+    let continueCursor: string | null = null
+    let isDone = false
+    let firstIteration = true
+
+    while (accumulated.length < desired) {
+      const pageResult = await baseQuery.paginate({
+        cursor,
+        numItems: Math.max(desired - accumulated.length, 1),
       })
+
+      const filtered = pageResult.page.filter(filterContact)
+      accumulated = accumulated.concat(filtered)
+      continueCursor = pageResult.continueCursor
+      isDone = pageResult.isDone || !continueCursor
+
+      if (search || tag) {
+        // Keep scanning if we still need more matches and there are more pages
+        if (accumulated.length >= desired || !continueCursor) {
+          break
+        }
+        cursor = continueCursor
+        firstIteration = false
+        continue
+      }
+
+      // For non-filtered runs, return immediately after first page
+      if (firstIteration) {
+        accumulated = filtered
+      }
+      break
     }
 
-    // Filter by tag
-    if (tag) {
-      contacts = contacts.filter((contact) => contact.tags?.includes(tag))
+    if (accumulated.length > desired) {
+      accumulated = accumulated.slice(0, desired)
     }
 
-    return contacts
+    return {
+      page: accumulated,
+      continueCursor,
+      isDone: isDone || !continueCursor,
+    }
   },
 })
 
@@ -107,10 +164,7 @@ export const getContactByEmail = query({
     const { email } = getContactByEmailSchema.parse(args)
     const normalized = normalizeEmail(email)
 
-    const contact = await ctx.db
-      .query("contacts")
-      .withIndex("by_primaryEmail", (q) => q.eq("primaryEmail", normalized))
-      .first()
+    const contact = await findContactByAnyEmail(ctx, normalized)
 
     return contact
   },
@@ -202,6 +256,7 @@ export const upsertContact = mutation({
         tags?: string[]
         emails?: string[]
         updatedAt: number
+        primaryEmail?: string
       } = {
         updatedAt: now,
       }
@@ -214,20 +269,17 @@ export const upsertContact = mutation({
       if (tags !== undefined) updatedFields.tags = tags
 
       // Ensure email is in emails array if not already present
-      const currentEmails = existing.emails || []
-      if (!currentEmails.includes(normalized)) {
-        updatedFields.emails = [...currentEmails, normalized]
+      const currentEmails = existing.emails ? existing.emails.map(normalizeEmail) : []
+      const emailSet = new Set(currentEmails)
+      emailSet.add(normalized)
+      updatedFields.emails = Array.from(emailSet)
+
+      const primaryNormalized = normalizeEmail(existing.primaryEmail)
+      if (primaryNormalized !== existing.primaryEmail || primaryNormalized !== normalized) {
+        updatedFields.primaryEmail = normalized
       }
 
-      // If existing contact has different primaryEmail, update it to match
-      if (existing.primaryEmail !== normalized) {
-        await ctx.db.patch(existing._id, {
-          ...updatedFields,
-          primaryEmail: normalized,
-        })
-      } else {
-        await ctx.db.patch(existing._id, updatedFields)
-      }
+      await ctx.db.patch(existing._id, updatedFields)
       return existing._id
     } else {
       // Create new contact
@@ -413,6 +465,7 @@ export const upsertContactFromEmail = internalMutation({
         lastContactedAt: number
         updatedAt: number
         emails?: string[]
+        primaryEmail?: string
       } = {
         lastContactedAt: now,
         updatedAt: now,
@@ -423,9 +476,23 @@ export const upsertContactFromEmail = internalMutation({
       }
 
       // Ensure email is in emails array if not already present
-      const currentEmails = existing.emails || []
-      if (!currentEmails.includes(normalized)) {
-        updates.emails = [...currentEmails, normalized]
+      const originalEmails = existing.emails || []
+      const currentEmails = originalEmails.map(normalizeEmail)
+      const emailSet = new Set(currentEmails)
+      const initialSize = emailSet.size
+      emailSet.add(normalized)
+      const sanitizedEmails = Array.from(emailSet)
+      const needsSync =
+        emailSet.size !== initialSize ||
+        originalEmails.length !== sanitizedEmails.length ||
+        originalEmails.some((email) => normalizeEmail(email) !== email)
+      if (needsSync) {
+        updates.emails = sanitizedEmails
+      }
+
+      const primaryNormalized = normalizeEmail(existing.primaryEmail)
+      if (primaryNormalized !== existing.primaryEmail || primaryNormalized !== normalized) {
+        updates.primaryEmail = normalized
       }
 
       await ctx.db.patch(existing._id, updates)
@@ -465,6 +532,7 @@ export const upsertContactFromEmail = internalMutation({
             lastContactedAt: number
             updatedAt: number
             emails?: string[]
+            primaryEmail?: string
           } = {
             lastContactedAt: now,
             updatedAt: now,
@@ -475,9 +543,23 @@ export const upsertContactFromEmail = internalMutation({
           }
 
           // Ensure email is in emails array
-          const currentEmails = keepContact.emails || []
-          if (!currentEmails.includes(normalized)) {
-            updates.emails = [...currentEmails, normalized]
+          const originalEmails = keepContact.emails || []
+          const currentEmails = originalEmails.map(normalizeEmail)
+          const emailSet = new Set(currentEmails)
+          const initialSize = emailSet.size
+          emailSet.add(normalized)
+          const sanitizedEmails = Array.from(emailSet)
+          const needsSync =
+            emailSet.size !== initialSize ||
+            originalEmails.length !== sanitizedEmails.length ||
+            originalEmails.some((email) => normalizeEmail(email) !== email)
+          if (needsSync) {
+            updates.emails = sanitizedEmails
+          }
+
+          const primaryNormalized = normalizeEmail(keepContact.primaryEmail)
+          if (primaryNormalized !== keepContact.primaryEmail || primaryNormalized !== normalized) {
+            updates.primaryEmail = normalized
           }
 
           await ctx.db.patch(keepContact._id, updates)
@@ -503,6 +585,7 @@ export const upsertContactFromEmail = internalMutation({
           lastContactedAt: number
           updatedAt: number
           emails?: string[]
+          primaryEmail?: string
         } = {
           lastContactedAt: now,
           updatedAt: now,
@@ -513,9 +596,23 @@ export const upsertContactFromEmail = internalMutation({
         }
 
         // Ensure email is in emails array (should already be, but just in case)
-        const currentEmails = existingContact.emails || []
-        if (!currentEmails.includes(normalized)) {
-          updates.emails = [...currentEmails, normalized]
+        const originalEmails = existingContact.emails || []
+        const currentEmails = originalEmails.map(normalizeEmail)
+        const emailSet = new Set(currentEmails)
+        const initialSize = emailSet.size
+        emailSet.add(normalized)
+        const sanitizedEmails = Array.from(emailSet)
+        const needsSync =
+          emailSet.size !== initialSize ||
+          originalEmails.length !== sanitizedEmails.length ||
+          originalEmails.some((email) => normalizeEmail(email) !== email)
+        if (needsSync) {
+          updates.emails = sanitizedEmails
+        }
+
+        const primaryNormalized = normalizeEmail(existingContact.primaryEmail)
+        if (primaryNormalized !== existingContact.primaryEmail) {
+          updates.primaryEmail = primaryNormalized
         }
 
         await ctx.db.patch(existingContact._id, updates)
@@ -544,6 +641,91 @@ export const touchLastContactedInternal = internalMutation({
         updatedAt: Date.now(),
       })
     }
+  },
+})
+
+export const updateEnrichment = mutation({
+  args: {
+    contactId: v.id("contacts"),
+    enrichments: v.any(),
+    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("completed"), v.literal("error"), v.literal("skipped")),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx)
+    const { contactId, enrichments, status, error } = updateEnrichmentSchema.parse(args)
+
+    const contact = await ctx.db.get(contactId)
+    if (!contact) {
+      throw new Error("Contact not found")
+    }
+
+    const now = Date.now()
+
+    await ctx.db.patch(contactId, {
+      enrichment: {
+        contactId,
+        provider: 'fire-enrich',
+        updatedAt: now,
+        lastRunStatus: status,
+        lastRunError: error,
+        fields: enrichments,
+      },
+      updatedAt: now,
+    })
+
+    return contactId
+  },
+})
+
+// Internal mutation to apply enrichment data to top-level contact fields if empty
+export const applyEnrichmentToContact = internalMutation({
+  args: {
+    contactId: v.id("contacts"),
+  },
+  handler: async (ctx, { contactId }) => {
+    const contact = await ctx.db.get(contactId)
+    if (!contact || !contact.enrichment?.fields) {
+      return contactId
+    }
+
+    const enrichments = contact.enrichment.fields as Record<string, {
+      field: string
+      value: string | number | boolean | string[] | null
+      confidence: number
+      source?: string
+    }>
+
+    const updates: {
+      company?: string
+      title?: string
+      updatedAt: number
+    } = {
+      updatedAt: Date.now(),
+    }
+
+    // Apply company name if empty and enrichment has companyName
+    if (!contact.company && enrichments.companyName) {
+      const companyName = enrichments.companyName.value
+      if (typeof companyName === 'string' && companyName.length > 0) {
+        updates.company = companyName
+      }
+    }
+
+    // Apply title if empty and enrichment has titleNormalized
+    if (!contact.title && enrichments.titleNormalized) {
+      const title = enrichments.titleNormalized.value
+      if (typeof title === 'string' && title.length > 0) {
+        updates.title = title
+      }
+    }
+
+    // Only patch if we have updates
+    if (updates.company || updates.title) {
+      await ctx.db.patch(contactId, updates)
+    }
+
+    return contactId
   },
 })
 

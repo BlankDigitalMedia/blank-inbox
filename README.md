@@ -10,6 +10,7 @@ A modern, self-hosted email client built with Next.js, Convex, and React. Design
 - 🏷️ Email organization: Archive, Star, Trash, Drafts
 - 🧵 Email threading support
 - 👥 Contacts management: auto-create from emails, manual edit with tags and notes
+- 🔍 AI-powered contact enrichment: enrich contacts with company and person data using multi-agent pipeline (company profile, funding, tech stack, person info)
 - 🌓 Dark/light theme toggle
 - 📱 Responsive design
 - 🔒 HTML email sanitization (XSS protection)
@@ -68,6 +69,13 @@ ADMIN_EMAIL=your-email@example.com
 # Email providers (at least one recommended)
 RESEND_API_KEY=re_your_resend_api_key
 NEXT_INBOUND_API_KEY=sk_your_inbound_api_key
+
+# Contact enrichment (optional - for AI-powered contact enrichment)
+# Requires both keys for full enrichment capabilities:
+# - FIRECRAWL_API_KEY: For web scraping, crawling, and search (get from https://firecrawl.dev)
+# - OPENAI_API_KEY: For AI-powered data extraction (get from https://platform.openai.com)
+FIRECRAWL_API_KEY=fc_your_firecrawl_api_key
+OPENAI_API_KEY=sk_your_openai_api_key
 ```
 
 **Set email provider keys in Convex** (for backend access):
@@ -75,6 +83,10 @@ NEXT_INBOUND_API_KEY=sk_your_inbound_api_key
 ```bash
 npx convex env set RESEND_API_KEY re_your_resend_api_key
 npx convex env set NEXT_INBOUND_API_KEY sk_your_inbound_api_key
+
+# Optional: Set enrichment API keys (for contact enrichment feature)
+npx convex env set FIRECRAWL_API_KEY fc_your_firecrawl_api_key
+npx convex env set OPENAI_API_KEY sk_your_openai_api_key
 
 # Required: Set webhook secret for security
 npx convex env set INBOUND_WEBHOOK_SECRET $(openssl rand -hex 32)

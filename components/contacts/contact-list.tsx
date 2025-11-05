@@ -2,7 +2,8 @@
 
 import { useMemo } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { InfiniteScroll } from "@/components/ui/infinite-scroll"
+import { cn, extractEmailAddress } from "@/lib/utils"
 import type { Id } from "@/convex/_generated/dataModel"
 
 interface Contact {
@@ -13,18 +14,27 @@ interface Contact {
   title?: string
   lastContactedAt?: number
   tags?: string[]
+  emails?: string[]
 }
 
 interface ContactListProps {
   contacts: Contact[]
   selectedContactId: Id<"contacts"> | null
   onSelectContact: (id: Id<"contacts"> | null) => void
+  onLoadMore?: () => void
+  hasNextPage?: boolean
+  isLoadingMore?: boolean
+  isInitialLoading?: boolean
 }
 
 export function ContactList({
   contacts,
   selectedContactId,
   onSelectContact,
+  onLoadMore,
+  hasNextPage = false,
+  isLoadingMore = false,
+  isInitialLoading = false,
 }: ContactListProps) {
   const getInitials = (contact: Contact) => {
     if (contact.name) {
@@ -61,6 +71,14 @@ export function ContactList({
     }, {} as Record<string, string | null>)
   }, [contacts])
 
+  if (isInitialLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
+        <p className="text-sm">Loading contacts...</p>
+      </div>
+    )
+  }
+
   if (contacts.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -71,47 +89,61 @@ export function ContactList({
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
-      {contacts.map((contact) => {
-        const isSelected = selectedContactId === contact._id
-        return (
-          <div
-            key={contact._id}
-            onClick={() => onSelectContact(contact._id)}
-            className={cn(
-              "flex items-center gap-3 px-4 py-3 border-b cursor-pointer hover:bg-muted/50 transition-colors",
-              isSelected && "bg-muted"
-            )}
-          >
-            <Avatar>
-              <AvatarFallback className="bg-primary text-primary-foreground">
-                {getInitials(contact)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium truncate">
-                  {contact.name || contact.primaryEmail}
-                </p>
-                {contact.tags && contact.tags.length > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    ({contact.tags.length} tag{contact.tags.length !== 1 ? "s" : ""})
-                  </span>
+      <InfiniteScroll
+        items={contacts}
+        hasNextPage={hasNextPage}
+        isLoading={isLoadingMore}
+        onLoadMore={() => onLoadMore?.()}
+        loadingComponent={
+          <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            Loading more contacts...
+          </div>
+        }
+        renderItem={(contact) => {
+          const isSelected = selectedContactId === contact._id
+          const emailDisplay = extractEmailAddress(contact.primaryEmail)
+
+          return (
+            <div
+              key={contact._id}
+              onClick={() => onSelectContact(contact._id)}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 border-b cursor-pointer hover:bg-muted/50 transition-colors",
+                isSelected && "bg-muted"
+              )}
+            >
+              <Avatar>
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {getInitials(contact)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">
+                    {contact.name || emailDisplay}
+                  </p>
+                  {contact.tags && contact.tags.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      ({contact.tags.length} tag{contact.tags.length !== 1 ? "s" : ""})
+                    </span>
+                  )}
+                </div>
+                {contact.name && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {emailDisplay}
+                  </p>
+                )}
+                {lastContactedTimes[contact._id] && (
+                  <p className="text-xs text-muted-foreground">
+                    {lastContactedTimes[contact._id]}
+                  </p>
                 )}
               </div>
-              {contact.name && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {contact.primaryEmail}
-                </p>
-              )}
-              {lastContactedTimes[contact._id] && (
-                <p className="text-xs text-muted-foreground">
-                  {lastContactedTimes[contact._id]}
-                </p>
-              )}
             </div>
-          </div>
-        )
-      })}
+          )
+        }}
+      />
     </div>
   )
 }

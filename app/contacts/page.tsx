@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useQuery } from "convex/react"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { useQuery, usePaginatedQuery } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
@@ -27,10 +27,18 @@ export default function ContactsPage() {
 
   const isLg = useIsLargeScreen()
 
-  // Use server-side search instead of client-side filtering
-  const contacts = useQuery(api.contacts.listContacts, { search: search.trim() || undefined })
+  // Paginated contacts query with optional search term
+  const {
+    results: paginatedContacts,
+    status: contactsStatus,
+    loadMore: loadMoreContacts,
+  } = usePaginatedQuery(
+    api.contacts.listContacts,
+    { search: search.trim() || undefined },
+    { initialNumItems: 50 }
+  )
 
-  const filteredContacts = contacts ?? []
+  const contacts = paginatedContacts ?? []
 
   // Fetch specific contact if provided via query parameter (for inbox navigation)
   const contactParam = searchParams.get("contact")
@@ -55,7 +63,7 @@ export default function ContactsPage() {
     if (!selectedContactId) return null
     
     // First check if it's in the filtered contacts list
-    if (contacts) {
+    if (contacts.length > 0) {
       const found = contacts.find((c) => c._id === selectedContactId)
       if (found) return found
     }
@@ -70,6 +78,22 @@ export default function ContactsPage() {
 
   const showList = isLg || (!isLg && !selectedContact)
   const showDetail = isLg || (!isLg && !!selectedContact)
+
+  const hasMoreContacts = contactsStatus === "CanLoadMore"
+  const isLoadingMoreContacts = contactsStatus === "LoadingMore"
+  const isInitialContactsLoading = contactsStatus === "LoadingFirstPage"
+
+  const handleLoadMoreContacts = useCallback(() => {
+    if (hasMoreContacts) {
+      loadMoreContacts(50)
+    }
+  }, [hasMoreContacts, loadMoreContacts])
+
+  useEffect(() => {
+    if (search.trim() && contacts.length === 0 && hasMoreContacts) {
+      loadMoreContacts(50)
+    }
+  }, [search, contacts.length, hasMoreContacts, loadMoreContacts])
 
   const handleBack = () => {
     setSelectedContactId(null)
@@ -111,15 +135,20 @@ export default function ContactsPage() {
                 />
               </div>
               <ContactList
-                contacts={filteredContacts}
+                contacts={contacts}
                 selectedContactId={selectedContactId}
                 onSelectContact={setSelectedContactId}
+                onLoadMore={handleLoadMoreContacts}
+                hasNextPage={hasMoreContacts}
+                isLoadingMore={isLoadingMoreContacts}
+                isInitialLoading={isInitialContactsLoading}
               />
             </div>
 
             {/* Detail pane */}
             <div className={showDetail ? "flex flex-1 min-w-0" : "hidden lg:flex flex-1 min-w-0"}>
               <ContactDetail
+                key={selectedContact?._id ?? "no-contact"}
                 contact={selectedContact}
                 onBack={handleBack}
                 onDeleted={handleContactDeleted}
